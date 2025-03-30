@@ -1,8 +1,9 @@
 use std::{fs::File, path::PathBuf};
 
 use crate::{
-    common::{table_schema_file_name, Error},
+    common::{table_data_file_name, table_schema_file_name, Error},
     query::{CreateTableQuery, InsertQuery, SelectQuery},
+    schema::TableSchema,
 };
 
 pub struct PBase {
@@ -22,8 +23,12 @@ impl PBase {
         unimplemented!()
     }
 
-    pub fn run_insert_query(&self, query: InsertQuery) {
-        unimplemented!()
+    pub fn run_insert_query(&self, query: InsertQuery) -> Result<(), Error> {
+        let table_schema: TableSchema = serde_json::from_reader(File::open(
+            table_schema_file_name(&self.current_dir, &query.table),
+        )?)?;
+
+        Ok(())
     }
 
     pub fn run_create_table_query(&self, query: CreateTableQuery) -> Result<(), Error> {
@@ -33,6 +38,8 @@ impl PBase {
         ))?;
 
         serde_json::to_writer(&mut schema_file, &query.schema)?;
+
+        File::create(table_data_file_name(&self.current_dir, &query.schema.name))?;
 
         Ok(())
     }
