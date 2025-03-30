@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
+use crate::schema::TableSchema;
+
 pub enum Value {
     I32(i32),
-}
-
-pub enum Query {
-    Select(SelectQuery),
-    Insert(InsertQuery),
 }
 
 pub struct FieldSelector {
@@ -23,4 +20,8 @@ pub struct SelectQuery {
 pub struct InsertQuery {
     pub table: String,
     pub values: HashMap<String, Value>,
+}
+
+pub struct CreateTableQuery {
+    pub schema: TableSchema,
 }

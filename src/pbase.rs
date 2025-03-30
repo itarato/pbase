@@ -1,39 +1,39 @@
+use std::{fs::File, path::PathBuf};
+
 use crate::{
-    common::*,
-    query::{Query, SelectQuery},
+    common::{table_schema_file_name, Error},
+    query::{CreateTableQuery, InsertQuery, SelectQuery},
 };
-use std::path::PathBuf;
 
 pub struct PBase {
-    active_database: Option<PathBuf>,
+    current_dir: PathBuf,
 }
 
 impl PBase {
-    pub fn new() -> PBase {
-        PBase {
-            active_database: None,
-        }
+    pub fn new(current_dir: PathBuf) -> PBase {
+        PBase { current_dir }
     }
 
-    pub fn select_database<PB>(&mut self, name: PB) -> Result<(), Error>
-    where
-        PB: Into<PathBuf>,
-    {
-        let name: PathBuf = name.into();
-
-        if name.exists() && name.is_file() {
-            self.active_database = Some(name);
-            Ok(())
-        } else {
-            Err(PBaseError::DatabaseDoesNotExist.into())
-        }
+    pub fn is_table_exist(&self, table_name: &str) -> bool {
+        table_schema_file_name(&self.current_dir, table_name).exists()
     }
 
-    pub fn run_query(&self, query: Query) {
-        match query {
-            Query::Select(select_query) => self.run_select_query(select_query),
-        }
+    pub fn run_select_query(&self, query: SelectQuery) {
+        unimplemented!()
     }
 
-    fn run_select_query(&self, select_query: SelectQuery) {}
+    pub fn run_insert_query(&self, query: InsertQuery) {
+        unimplemented!()
+    }
+
+    pub fn run_create_table_query(&self, query: CreateTableQuery) -> Result<(), Error> {
+        let mut schema_file = File::create(table_schema_file_name(
+            &self.current_dir,
+            &query.schema.name,
+        ))?;
+
+        serde_json::to_writer(&mut schema_file, &query.schema)?;
+
+        Ok(())
+    }
 }
