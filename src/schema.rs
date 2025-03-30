@@ -26,6 +26,15 @@ pub struct TableSchema {
     pub fields: IndexMap<String, FieldSchema>,
 }
 
+impl TableSchema {
+    pub fn row_byte_size(&self) -> usize {
+        self.fields
+            .values()
+            .map(|field_schema| field_schema.byte_size())
+            .sum()
+    }
+}
+
 pub struct DatabaseSchema {
     pub tables: HashMap<String, TableSchema>,
 }
