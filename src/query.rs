@@ -1,10 +1,6 @@
 use std::collections::HashMap;
 
-use crate::schema::TableSchema;
-
-pub enum Value {
-    I32(i32),
-}
+use crate::{common::Value, schema::TableSchema};
 
 pub struct FieldSelector {
     pub name: String,

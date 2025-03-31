@@ -1,5 +1,4 @@
 mod common;
-mod database;
 mod pbase;
 mod query;
 mod schema;
@@ -12,6 +11,7 @@ use schema::FieldSchema;
 use schema::I32FieldSchema;
 use schema::TableSchema;
 
+use crate::common::*;
 use crate::pbase::*;
 use crate::query::*;
 
@@ -35,9 +35,10 @@ fn main() {
 
     let insert_query = InsertQuery {
         table: "example".into(),
-        values: HashMap::from([("".into(), Value::I32(123))]),
+        values: HashMap::from([("value".into(), Value::I32(123))]),
     };
-    db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(insert_query);
+    dbg!(insert_result);
 
     let select_query = SelectQuery {
         result: vec![FieldSelector {
@@ -48,4 +49,5 @@ fn main() {
         limit: None,
     };
     let rows = db.run_select_query(select_query);
+    dbg!(rows);
 }
