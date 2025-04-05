@@ -97,6 +97,8 @@ impl PBase {
 
         File::create(table_data_file_name(&self.current_dir, &query.schema.name))?;
 
+        println!("Created bigtable");
+
         Ok(())
     }
 }
