@@ -2,6 +2,7 @@ use indexmap::IndexMap;
 use pbase::pbase::*;
 use pbase::query::*;
 use pbase::schema::*;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 fn main() {
@@ -29,6 +30,10 @@ fn main() {
                         FieldSchema::I32(I32FieldSchema { required: true }),
                     ),
                 ]),
+                indices: HashMap::from([(
+                    "field_1_and_2".into(),
+                    vec!["field1".into(), "field2".into()],
+                )]),
             },
         };
 

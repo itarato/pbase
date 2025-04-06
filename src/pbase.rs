@@ -6,10 +6,12 @@ use std::{
 };
 
 use bytes::BytesMut;
+use memmap::Mmap;
 
 use crate::{
     common::{
-        parse_row_bytes, table_data_file_name, table_schema_file_name, Error, PBaseError, Value,
+        index_file_name, parse_row_bytes, table_data_file_name, table_schema_file_name, Error,
+        PBaseError, Value,
     },
     query::{CreateTableQuery, InsertQuery, SelectQuery},
     schema::TableSchema,
@@ -75,6 +77,9 @@ impl PBase {
                     bytes[field_byte_pos..field_byte_pos + 4]
                         .copy_from_slice(&i32_value.to_le_bytes());
                 }
+                Value::NULL => {
+                    // Noop - as long as we zero out the line.
+                }
             };
         });
 
@@ -83,6 +88,10 @@ impl PBase {
             .append(true)
             .open(table_data_file_name(&self.current_dir, &query.table))?;
         table_data_file.write(&bytes)?;
+
+        for (index_name, index_fields) in &table_schema.indices {
+            self.insert_to_index(index_name, index_fields, &query, &table_schema);
+        }
 
         Ok(1)
     }
@@ -100,5 +109,111 @@ impl PBase {
         println!("Created bigtable");
 
         Ok(())
+    }
+
+    fn insert_to_index(
+        &self,
+        index_name: &str,
+        index_fields: &Vec<String>,
+        query: &InsertQuery,
+        table_schema: &TableSchema,
+    ) -> Result<(), Error> {
+        // TODO:
+        // - experiment with memory mapped vs raw file mode.
+
+        // Extract exact fields in exact order.
+        let index_values: Vec<&Value> = index_fields
+            .iter()
+            .map(|index_field_name| query.values.get(index_field_name).unwrap_or(&Value::NULL))
+            .collect();
+
+        // Find position.
+        let index_file_name = index_file_name(&self.current_dir, &query.table, index_name);
+        let index_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(index_file_name)?;
+        let index_file_mmap = unsafe { memmap::MmapOptions::new().map(&index_file)? };
+        let insert_pos = self.find_insert_pos_in_index(
+            &index_name,
+            &index_file_mmap,
+            &index_values,
+            &table_schema,
+        );
+
+        // Divide index list + insert + merge
+        // Save
+
+        Ok(())
+    }
+
+    fn find_insert_pos_in_index(
+        &self,
+        index_name: &str,
+        index_file_mmap: &Mmap,
+        index_values: &Vec<&Value>,
+        table_schema: &TableSchema,
+    ) -> usize {
+        let index_row_size = table_schema.index_row_byte_size(index_name);
+
+        let mut lhs_idx = -1i32;
+        let mut rhs_idx = (index_file_mmap.len() / index_row_size) as i32;
+
+        let mut field_byte_pos = 0usize;
+        let mut field_idx = 0usize;
+        for index_field_name in &table_schema.indices[index_name] {
+            let field_schema = &table_schema.fields[index_field_name];
+            let cmp_value = index_values[field_idx];
+
+            // Find pos between lhs_idx and rhs_idx for current level.
+            // Find LHS.
+            let mut i = lhs_idx;
+            let mut j = rhs_idx;
+            loop {
+                if i + 1 >= j {
+                    break;
+                }
+
+                let mid = (i + j) / 2;
+                let mid_value_bytes_pos = mid as usize * index_row_size + field_byte_pos;
+                let mid_value =
+                    field_schema.value_from_bytes(&index_file_mmap[..], mid_value_bytes_pos);
+
+                if &mid_value < cmp_value {
+                    i = mid;
+                } else {
+                    j = mid;
+                }
+            }
+
+            // Find RHS.
+            lhs_idx = i; // Final.
+            j = rhs_idx;
+
+            loop {
+                if i + 1 >= j {
+                    break;
+                }
+
+                let mid = (i + j) / 2;
+                let mid_value_bytes_pos = mid as usize * index_row_size + field_byte_pos;
+                let mid_value =
+                    field_schema.value_from_bytes(&index_file_mmap[..], mid_value_bytes_pos);
+
+                if &mid_value > cmp_value {
+                    j = mid;
+                } else {
+                    i = mid;
+                }
+            }
+
+            rhs_idx = j; // Final.
+
+            field_byte_pos += field_schema.byte_size();
+            field_idx += 1;
+        }
+
+        unimplemented!()
     }
 }

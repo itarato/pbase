@@ -2,6 +2,8 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::common::Value;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct I32FieldSchema {
     pub required: bool,
@@ -18,12 +20,25 @@ impl FieldSchema {
             FieldSchema::I32(_) => 4,
         }
     }
+
+    pub fn value_from_bytes(&self, bytes: &[u8], pos: usize) -> Value {
+        let value_bytes = &bytes[pos..pos + self.byte_size()];
+        match self {
+            FieldSchema::I32(_) => {
+                let value = i32::from_le_bytes(
+                    value_bytes.try_into().expect("slice with incorrect length"),
+                );
+                Value::I32(value)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableSchema {
     pub name: String,
     pub fields: IndexMap<String, FieldSchema>,
+    pub indices: HashMap<String, Vec<String>>,
 }
 
 impl TableSchema {
@@ -45,6 +60,13 @@ impl TableSchema {
         }
 
         panic!("Field '{}' not found in table '{}'", field_name, self.name)
+    }
+
+    pub fn index_row_byte_size(&self, index_name: &str) -> usize {
+        self.indices[index_name]
+            .iter()
+            .map(|index_field_name| self.fields[index_field_name].byte_size())
+            .sum()
     }
 }
 

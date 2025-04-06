@@ -19,6 +19,7 @@ fn main() {
                     "value".into(),
                     FieldSchema::I32(I32FieldSchema { required: true }),
                 )]),
+                indices: HashMap::new(),
             },
         };
 
