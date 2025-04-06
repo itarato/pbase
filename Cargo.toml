@@ -12,18 +12,23 @@ bytes = "1.10"
 memmap = "0.7"
 rand = "0.9"
 sqlite = "0.37"
+anyhow = "1.0"
 
 [[bin]]
 name = "smoke"
 path = "src/bin/smoke.rs"
 
 [[bin]]
-name = "create_bigtable"
-path = "src/bin/create_bigtable.rs"
+name = "bigtable_create"
+path = "src/bin/bigtable_create.rs"
 
 [[bin]]
 name = "bigtable_insert"
 path = "src/bin/bigtable_insert.rs"
+
+[[bin]]
+name = "bigtable_dump"
+path = "src/bin/bigtable_dump.rs"
 
 [[bin]]
 name = "sqlite"

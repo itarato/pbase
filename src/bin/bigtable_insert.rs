@@ -21,7 +21,7 @@ fn main() {
             ]),
         };
         if let Err(err) = db.run_insert_query(insert_query) {
-            eprintln!("Failed insert: {}", err);
+            eprintln!("Failed insert: {:?}", err);
             break;
         }
     }

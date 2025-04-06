@@ -9,6 +9,8 @@ use bytes::BytesMut;
 
 use crate::{common::*, query::*, schema::*};
 
+use anyhow::Context;
+
 pub struct PBase {
     current_dir: PathBuf,
 }
@@ -110,17 +112,27 @@ impl PBase {
             .map(|index_field_name| query.values.get(index_field_name).unwrap_or(&Value::NULL))
             .collect();
 
+        let index_row_bytes = &table_schema.index_row_to_bytes(index_name, &query.values)[..];
+
         // Find position.
         let index_file_name = index_file_name(&self.current_dir, &query.table, index_name);
-        let index_file = OpenOptions::new()
-            .create(true)
+        let mut index_file = OpenOptions::new()
+            .read(true)
             .write(true)
-            .truncate(false)
-            .open(&index_file_name)?;
+            .create(true)
+            .open(&index_file_name)
+            .context(format!("Cannot open index file: {:?}", &index_file_name))?;
+
+        if index_file.metadata()?.len() == 0 {
+            // Short circuit. We cannot map "nothing" to memory.
+            index_file.write_all(index_row_bytes)?;
+            return Ok(());
+        }
+
         let index_file_mmap = unsafe {
             memmap::MmapOptions::new()
                 .map(&index_file)
-                .map_err(|err| format!("MMAP creation error: {}", err))?
+                .context("Convert index file to memory mapped file.")?
         };
         let insert_pos =
             find_insert_pos_in_index(&index_name, &index_file_mmap, &index_values, &table_schema);
@@ -129,7 +141,6 @@ impl PBase {
         let index_row_size = table_schema.index_row_byte_size(index_name);
         let lhs_bytes = &index_file_mmap[0..insert_pos * index_row_size];
         let rhs_bytes = &index_file_mmap[insert_pos * index_row_size..];
-        let mid_bytes = &table_schema.index_row_to_bytes(index_name, &query.values)[..];
 
         // Save
         let tmp_file_path = index_file_name.with_extension("tmp");
@@ -140,7 +151,7 @@ impl PBase {
             .open(&tmp_file_path)?;
 
         tmp_file.write_all(lhs_bytes)?;
-        tmp_file.write_all(mid_bytes)?;
+        tmp_file.write_all(index_row_bytes)?;
         tmp_file.write_all(rhs_bytes)?;
 
         drop(index_file_mmap);
