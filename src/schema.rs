@@ -68,6 +68,23 @@ impl TableSchema {
             .map(|index_field_name| self.fields[index_field_name].byte_size())
             .sum()
     }
+
+    pub fn index_row_to_bytes(&self, index_name: &str, values: &HashMap<String, Value>) -> Vec<u8> {
+        let mut out = vec![];
+        out.resize(self.index_row_byte_size(index_name), 0u8);
+
+        let mut pos = 0usize;
+        for index_field in &self.indices[index_name] {
+            let field_byte_size = self.fields[index_field].byte_size();
+            if let Some(value) = values.get(index_field) {
+                value.copy_bytes_to(&mut out, pos);
+            }
+
+            pos += field_byte_size;
+        }
+
+        out
+    }
 }
 
 pub struct DatabaseSchema {

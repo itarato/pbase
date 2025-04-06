@@ -63,16 +63,7 @@ impl PBase {
 
         query.values.iter().for_each(|(field_name, field_value)| {
             let field_byte_pos = table_schema.field_byte_pos(field_name);
-
-            match field_value {
-                Value::I32(i32_value) => {
-                    bytes[field_byte_pos..field_byte_pos + 4]
-                        .copy_from_slice(&i32_value.to_le_bytes());
-                }
-                Value::NULL => {
-                    // Noop - as long as we zero out the line.
-                }
-            };
+            field_value.copy_bytes_to(&mut bytes, field_byte_pos);
         });
 
         let mut table_data_file = OpenOptions::new()
@@ -125,13 +116,37 @@ impl PBase {
             .create(true)
             .write(true)
             .truncate(false)
-            .open(index_file_name)?;
-        let index_file_mmap = unsafe { memmap::MmapOptions::new().map(&index_file)? };
+            .open(&index_file_name)?;
+        let index_file_mmap = unsafe {
+            memmap::MmapOptions::new()
+                .map(&index_file)
+                .map_err(|err| format!("MMAP creation error: {}", err))?
+        };
         let insert_pos =
             find_insert_pos_in_index(&index_name, &index_file_mmap, &index_values, &table_schema);
 
         // Divide index list + insert + merge
+        let index_row_size = table_schema.index_row_byte_size(index_name);
+        let lhs_bytes = &index_file_mmap[0..insert_pos * index_row_size];
+        let rhs_bytes = &index_file_mmap[insert_pos * index_row_size..];
+        let mid_bytes = &table_schema.index_row_to_bytes(index_name, &query.values)[..];
+
         // Save
+        let tmp_file_path = index_file_name.with_extension("tmp");
+        let mut tmp_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&tmp_file_path)?;
+
+        tmp_file.write_all(lhs_bytes)?;
+        tmp_file.write_all(mid_bytes)?;
+        tmp_file.write_all(rhs_bytes)?;
+
+        drop(index_file_mmap);
+        drop(index_file);
+
+        std::fs::rename(tmp_file_path, index_file_name)?;
 
         Ok(())
     }

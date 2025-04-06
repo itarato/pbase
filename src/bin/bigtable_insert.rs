@@ -10,7 +10,7 @@ fn main() {
 
     let mut rng = rand::rng();
 
-    for _ in 1..10_000 {
+    for _ in 0..1 {
         let insert_query = InsertQuery {
             table: "bigtable".into(),
             values: HashMap::from([

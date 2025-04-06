@@ -18,6 +18,15 @@ pub enum Value {
     I32(i32),
 }
 
+impl Value {
+    pub fn copy_bytes_to(&self, buf: &mut [u8], pos: usize) {
+        match self {
+            Value::NULL => {} // Noop.
+            Value::I32(v) => buf[pos..pos + 4].copy_from_slice(&v.to_le_bytes()),
+        };
+    }
+}
+
 impl Ord for Value {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
