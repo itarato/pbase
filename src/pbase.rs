@@ -5,8 +5,6 @@ use std::{
     path::PathBuf,
 };
 
-use bytes::BytesMut;
-
 use crate::{common::*, query::*, schema::*};
 
 use anyhow::Context;
@@ -60,13 +58,7 @@ impl PBase {
             table_schema_file_name(&self.current_dir, &query.table),
         )?)?;
 
-        let mut bytes = BytesMut::with_capacity(table_schema.row_byte_size());
-        bytes.resize(table_schema.row_byte_size(), 0);
-
-        query.values.iter().for_each(|(field_name, field_value)| {
-            let field_byte_pos = table_schema.field_byte_pos(field_name);
-            field_value.copy_bytes_to(&mut bytes, field_byte_pos);
-        });
+        let bytes = table_schema.data_row_to_bytes(&query.values);
 
         let mut table_data_file = OpenOptions::new()
             .create(true)

@@ -73,6 +73,17 @@ impl TableSchema {
         fields_total_byte_len + TABLE_PTR_BYTE_SIZE
     }
 
+    pub fn data_row_to_bytes(&self, values: &HashMap<String, Value>) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.resize(self.row_byte_size(), 0u8);
+
+        for (field_name, field_value) in values {
+            field_value.copy_bytes_to(&mut bytes, self.field_byte_pos(field_name));
+        }
+
+        bytes
+    }
+
     pub fn index_row_to_bytes(
         &self,
         index_name: &str,
