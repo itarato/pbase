@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cmp::Ordering, collections::HashMap};
 
 use crate::{common::Value, schema::TableSchema};
 
@@ -7,10 +7,18 @@ pub struct FieldSelector {
     pub source: String,
 }
 
+pub struct RowFilter {
+    field: FieldSelector,
+    op: Ordering,
+    rhs: Value,
+}
+
 pub struct SelectQuery {
-    pub result: Vec<FieldSelector>,
+    // pub result: Vec<FieldSelector>,
     pub from: String,
-    pub limit: Option<usize>,
+    // List of AND-ed filters.
+    pub filters: Vec<RowFilter>,
+    // pub limit: Option<usize>,
 }
 
 pub struct InsertQuery {

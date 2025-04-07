@@ -27,6 +27,10 @@ name = "bigtable_insert"
 path = "src/bin/bigtable_insert.rs"
 
 [[bin]]
+name = "bigtable_select"
+path = "src/bin/bigtable_select.rs"
+
+[[bin]]
 name = "bigtable_dump"
 path = "src/bin/bigtable_dump.rs"
 

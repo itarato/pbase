@@ -35,12 +35,13 @@ fn main() {
     dbg!(insert_result);
 
     let select_query = SelectQuery {
-        result: vec![FieldSelector {
-            name: "value".into(),
-            source: "example".into(),
-        }],
+        // result: vec![FieldSelector {
+        //     name: "value".into(),
+        //     source: "example".into(),
+        // }],
         from: "example".into(),
-        limit: None,
+        filters: vec![],
+        // limit: None,
     };
     let rows = db.run_select_query(select_query);
     dbg!(rows);
