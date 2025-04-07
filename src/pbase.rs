@@ -72,10 +72,14 @@ impl PBase {
             .create(true)
             .append(true)
             .open(table_data_file_name(&self.current_dir, &query.table))?;
+        let new_row_pos = table_data_file
+            .metadata()
+            .context("Failed reading table file size")?
+            .len();
         table_data_file.write(&bytes)?;
 
         for (index_name, index_fields) in &table_schema.indices {
-            self.insert_to_index(index_name, index_fields, &query, &table_schema)?;
+            self.insert_to_index(index_name, index_fields, &query, &table_schema, new_row_pos)?;
         }
 
         Ok(1)
@@ -102,6 +106,7 @@ impl PBase {
         index_fields: &Vec<String>,
         query: &InsertQuery,
         table_schema: &TableSchema,
+        row_ptr: u64,
     ) -> Result<(), Error> {
         // TODO:
         // - experiment with memory mapped vs raw file mode.
@@ -112,7 +117,8 @@ impl PBase {
             .map(|index_field_name| query.values.get(index_field_name).unwrap_or(&Value::NULL))
             .collect();
 
-        let index_row_bytes = &table_schema.index_row_to_bytes(index_name, &query.values)[..];
+        let index_row_bytes =
+            &table_schema.index_row_to_bytes(index_name, &query.values, row_ptr)[..];
 
         // Find position.
         let index_file_name = index_file_name(&self.current_dir, &query.table, index_name);

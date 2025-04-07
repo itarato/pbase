@@ -4,6 +4,8 @@ use std::collections::HashMap;
 
 use crate::common::Value;
 
+pub const TABLE_PTR_BYTE_SIZE: usize = std::mem::size_of::<u64>();
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct I32FieldSchema {
     pub required: bool,
@@ -63,13 +65,20 @@ impl TableSchema {
     }
 
     pub fn index_row_byte_size(&self, index_name: &str) -> usize {
-        self.indices[index_name]
+        let fields_total_byte_len: usize = self.indices[index_name]
             .iter()
             .map(|index_field_name| self.fields[index_field_name].byte_size())
-            .sum()
+            .sum();
+
+        fields_total_byte_len + TABLE_PTR_BYTE_SIZE
     }
 
-    pub fn index_row_to_bytes(&self, index_name: &str, values: &HashMap<String, Value>) -> Vec<u8> {
+    pub fn index_row_to_bytes(
+        &self,
+        index_name: &str,
+        values: &HashMap<String, Value>,
+        row_ptr: u64,
+    ) -> Vec<u8> {
         let mut out = vec![];
         out.resize(self.index_row_byte_size(index_name), 0u8);
 
@@ -82,6 +91,8 @@ impl TableSchema {
 
             pos += field_byte_size;
         }
+
+        out[pos..pos + TABLE_PTR_BYTE_SIZE].copy_from_slice(&row_ptr.to_le_bytes());
 
         out
     }

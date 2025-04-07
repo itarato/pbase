@@ -3,7 +3,7 @@ use std::{fs::File, io::Read, path::PathBuf};
 use anyhow::Context;
 use pbase::{
     common::{index_file_name, table_data_file_name, table_schema_file_name, Error},
-    schema::TableSchema,
+    schema::{TableSchema, TABLE_PTR_BYTE_SIZE},
 };
 
 fn main() -> Result<(), Error> {
@@ -67,6 +67,10 @@ fn main() -> Result<(), Error> {
 
                 field_pos += table_schema.fields[index_field].byte_size();
             }
+            let row_ptr: u64 = u64::from_le_bytes(
+                index_buf[field_pos + pos..field_pos + pos + TABLE_PTR_BYTE_SIZE].try_into()?,
+            );
+            println!("\t\tPTR = #{}", row_ptr);
 
             pos += index_row_byte_size;
             row_idx += 1;
