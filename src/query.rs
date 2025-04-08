@@ -8,9 +8,9 @@ pub struct FieldSelector {
 }
 
 pub struct RowFilter {
-    field: FieldSelector,
-    op: Ordering,
-    rhs: Value,
+    pub field: FieldSelector,
+    pub op: Ordering,
+    pub rhs: Value,
 }
 
 pub struct SelectQuery {

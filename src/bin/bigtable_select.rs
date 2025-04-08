@@ -1,10 +1,6 @@
 use std::path::PathBuf;
 
-use pbase::{
-    common::Error,
-    pbase::PBase,
-    query::{FieldSelector, SelectQuery},
-};
+use pbase::{common::Error, pbase::PBase, query::SelectQuery};
 
 fn main() -> Result<(), Error> {
     let db = PBase::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::new()));
