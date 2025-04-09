@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{common::*, query::*, schema::*};
+use crate::{common::*, query::*, query_tools::*, schema::*};
 
 use anyhow::Context;
 

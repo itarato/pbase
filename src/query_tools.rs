@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{query::SelectQuery, schema::TableSchema};
+use crate::{common::Value, query::SelectQuery, schema::TableSchema};
 
 pub fn index_for_query(table_schema: &TableSchema, select_query: &SelectQuery) -> Option<String> {
     let mut filter_fields: HashSet<&String> = HashSet::new();
@@ -41,11 +41,84 @@ pub fn index_score(index_fields: &Vec<String>, filter_fields: &HashSet<&String>)
     score
 }
 
+pub fn find_insert_pos_in_index(
+    index_name: &str,
+    index_bytes: &[u8],
+    index_values: &Vec<&Value>,
+    table_schema: &TableSchema,
+) -> usize {
+    let index_row_size = table_schema.index_row_byte_size(index_name);
+
+    let mut lhs_idx = -1i32;
+    let mut rhs_idx = (index_bytes.len() / index_row_size) as i32;
+
+    let mut field_byte_pos = 0usize;
+    let mut field_idx = 0usize;
+    for index_field_name in &table_schema.indices[index_name] {
+        let field_schema = &table_schema.fields[index_field_name];
+        let cmp_value = index_values[field_idx];
+
+        // Find pos between lhs_idx and rhs_idx for current level.
+        // Find LHS.
+        let mut i = lhs_idx;
+        let mut j = rhs_idx;
+        loop {
+            if i + 1 >= j {
+                break;
+            }
+
+            let mid = (i + j) / 2;
+            let mid_value_bytes_pos = mid as usize * index_row_size + field_byte_pos;
+            let mid_value = field_schema.value_from_bytes(&index_bytes, mid_value_bytes_pos);
+
+            if &mid_value < cmp_value {
+                i = mid;
+            } else {
+                j = mid;
+            }
+        }
+
+        // Find RHS.
+        lhs_idx = i; // Final.
+        j = rhs_idx;
+
+        loop {
+            if i + 1 >= j {
+                break;
+            }
+
+            let mid = (i + j) / 2;
+            let mid_value_bytes_pos = mid as usize * index_row_size + field_byte_pos;
+            let mid_value = field_schema.value_from_bytes(&index_bytes, mid_value_bytes_pos);
+
+            if &mid_value > cmp_value {
+                j = mid;
+            } else {
+                i = mid;
+            }
+        }
+
+        rhs_idx = j; // Final.
+
+        field_byte_pos += field_schema.byte_size();
+        field_idx += 1;
+    }
+
+    rhs_idx as usize
+}
+
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
-    use crate::query_tools::index_score;
+    use indexmap::IndexMap;
+
+    use crate::common::Value;
+    use crate::query::{FieldSelector, RowFilter, SelectQuery};
+    use crate::query_tools::{find_insert_pos_in_index, index_score};
+    use crate::schema::{FieldSchema, I32FieldSchema, TableSchema};
+
+    use super::index_for_query;
 
     #[test]
     fn test_index_score() {
@@ -73,5 +146,192 @@ mod test {
                 &HashSet::from([&"B".to_string(), &"A".to_string(), &"C".to_string()])
             )
         );
+    }
+
+    #[test]
+    fn test_index_for_query() {
+        let table_schema = TableSchema {
+            name: "example".to_string(),
+            fields: IndexMap::from([
+                (
+                    "A".to_string(),
+                    FieldSchema::I32(I32FieldSchema { required: true }),
+                ),
+                (
+                    "B".to_string(),
+                    FieldSchema::I32(I32FieldSchema { required: true }),
+                ),
+                (
+                    "C".to_string(),
+                    FieldSchema::I32(I32FieldSchema { required: true }),
+                ),
+            ]),
+            indices: HashMap::from([
+                ("index1".to_string(), vec!["A".to_string()]),
+                ("index2".to_string(), vec!["B".to_string(), "C".to_string()]),
+            ]),
+        };
+
+        let select_query = SelectQuery {
+            from: "example".to_string(),
+            filters: vec![
+                RowFilter {
+                    field: FieldSelector {
+                        name: "A".to_string(),
+                        source: "example".to_string(),
+                    },
+                    op: std::cmp::Ordering::Equal,
+                    rhs: crate::common::Value::I32(0),
+                },
+                RowFilter {
+                    field: FieldSelector {
+                        name: "C".to_string(),
+                        source: "example".to_string(),
+                    },
+                    op: std::cmp::Ordering::Equal,
+                    rhs: crate::common::Value::I32(0),
+                },
+            ],
+        };
+
+        let index_name = index_for_query(&table_schema, &select_query);
+        assert_eq!(Some("index1".to_string()), index_name);
+    }
+
+    #[test]
+    fn test_find_insert_pos_in_index_single_field_index() {
+        let table_schema = TableSchema {
+            name: "fake_table".to_string(),
+            fields: IndexMap::from([(
+                "col1".to_string(),
+                FieldSchema::I32(I32FieldSchema { required: true }),
+            )]),
+            indices: HashMap::from([("fake_index".to_string(), vec!["col1".to_string()])]),
+        };
+
+        assert_find_insert_pos_in_index(
+            vec![[0], [0], [1], [1], [3], [3]],
+            vec![2],
+            4,
+            &table_schema,
+        );
+        assert_find_insert_pos_in_index(
+            vec![[0], [0], [1], [1], [3], [3]],
+            vec![1],
+            4,
+            &table_schema,
+        );
+        assert_find_insert_pos_in_index(
+            vec![[0], [0], [1], [1], [3], [3]],
+            vec![0],
+            2,
+            &table_schema,
+        );
+        assert_find_insert_pos_in_index(
+            vec![[0], [0], [1], [1], [3], [3]],
+            vec![3],
+            6,
+            &table_schema,
+        );
+        assert_find_insert_pos_in_index(
+            vec![[0], [0], [1], [1], [3], [3]],
+            vec![-1],
+            0,
+            &table_schema,
+        );
+        assert_find_insert_pos_in_index(
+            vec![[0], [0], [1], [1], [3], [3]],
+            vec![4],
+            6,
+            &table_schema,
+        );
+    }
+
+    #[test]
+    fn test_find_insert_pos_in_index_multi_field_index() {
+        let table_schema = TableSchema {
+            name: "fake_table".to_string(),
+            fields: IndexMap::from([
+                (
+                    "col1".to_string(),
+                    FieldSchema::I32(I32FieldSchema { required: true }),
+                ),
+                (
+                    "col2".to_string(),
+                    FieldSchema::I32(I32FieldSchema { required: true }),
+                ),
+            ]),
+            indices: HashMap::from([(
+                "fake_index".to_string(),
+                vec!["col1".to_string(), "col2".to_string()],
+            )]),
+        };
+
+        #[rustfmt::skip]
+        assert_find_insert_pos_in_index(
+            vec![
+                [0, 0],
+                [0, 1],
+                [0, 2],
+                [1, 0],
+                [1, 1],
+                [1, 2],
+                [3, 0],
+                [3, 1],
+                [3, 2],
+            ],
+            vec![2, 0],
+            6,
+            &table_schema
+        );
+
+        #[rustfmt::skip]
+        assert_find_insert_pos_in_index(
+            vec![
+                [0, 0],
+                [0, 1],
+                [0, 2],
+                [1, 0],
+                [1, 1],
+                [1, 2],
+                [3, 0],
+                [3, 1],
+                [3, 2],
+            ],
+            vec![1, 1],
+            5,
+            &table_schema
+        );
+    }
+
+    fn assert_find_insert_pos_in_index<const INDEX_LEN: usize>(
+        index_content: Vec<[i32; INDEX_LEN]>,
+        to_find: Vec<i32>,
+        expected: usize,
+        table_schema: &TableSchema,
+    ) {
+        let index_name = "fake_index";
+
+        let index_bytes = &index_content
+            .iter()
+            .flat_map(|i32_vals| {
+                let mut as_vec = i32_vals.to_vec();
+                // The two i32 mimics the row index. We don't use them so it's just a padding.
+                as_vec.push(0);
+                as_vec.push(0);
+
+                as_vec
+            })
+            .flat_map(|v| v.to_le_bytes())
+            .collect::<Vec<_>>();
+
+        let index_bytes = &index_bytes[..];
+        let index_values: Vec<Value> = to_find.iter().map(|v| Value::I32(*v)).collect();
+        let index_values_refs: Vec<&Value> = index_values.iter().collect();
+
+        let result =
+            find_insert_pos_in_index(index_name, index_bytes, &index_values_refs, &table_schema);
+
+        assert_eq!(expected, result);
     }
 }
