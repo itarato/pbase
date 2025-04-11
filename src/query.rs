@@ -2,11 +2,13 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use crate::{common::Value, schema::TableSchema};
 
+#[derive(Clone)]
 pub struct FieldSelector {
     pub name: String,
     pub source: String,
 }
 
+#[derive(Clone)]
 pub struct RowFilter {
     pub field: FieldSelector,
     pub op: Ordering,

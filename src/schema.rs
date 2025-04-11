@@ -7,26 +7,21 @@ use crate::common::Value;
 pub const TABLE_PTR_BYTE_SIZE: usize = std::mem::size_of::<u64>();
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct I32FieldSchema {
-    pub required: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub enum FieldSchema {
-    I32(I32FieldSchema),
+    I32,
 }
 
 impl FieldSchema {
     pub fn byte_size(&self) -> usize {
         match self {
-            FieldSchema::I32(_) => 4,
+            FieldSchema::I32 => 4,
         }
     }
 
     pub fn value_from_bytes(&self, bytes: &[u8], pos: usize) -> Value {
         let value_bytes = &bytes[pos..pos + self.byte_size()];
         match self {
-            FieldSchema::I32(_) => {
+            FieldSchema::I32 => {
                 let value = i32::from_le_bytes(
                     value_bytes.try_into().expect("slice with incorrect length"),
                 );

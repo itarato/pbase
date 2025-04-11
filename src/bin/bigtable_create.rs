@@ -13,22 +13,10 @@ fn main() {
             schema: TableSchema {
                 name: "bigtable".into(),
                 fields: IndexMap::from([
-                    (
-                        "field1".into(),
-                        FieldSchema::I32(I32FieldSchema { required: true }),
-                    ),
-                    (
-                        "field2".into(),
-                        FieldSchema::I32(I32FieldSchema { required: true }),
-                    ),
-                    (
-                        "field3".into(),
-                        FieldSchema::I32(I32FieldSchema { required: true }),
-                    ),
-                    (
-                        "field4".into(),
-                        FieldSchema::I32(I32FieldSchema { required: true }),
-                    ),
+                    ("field1".into(), FieldSchema::I32),
+                    ("field2".into(), FieldSchema::I32),
+                    ("field3".into(), FieldSchema::I32),
+                    ("field4".into(), FieldSchema::I32),
                 ]),
                 indices: HashMap::from([(
                     "field_1_and_2".into(),

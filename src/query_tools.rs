@@ -1,15 +1,140 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use crate::{common::Value, query::SelectQuery, schema::TableSchema};
+use crate::{
+    common::{parse_row_bytes, PBaseError, Value},
+    query::SelectQuery,
+    schema::TableSchema,
+};
 
-pub fn index_for_query(table_schema: &TableSchema, select_query: &SelectQuery) -> Option<String> {
-    let mut filter_fields: HashSet<&String> = HashSet::new();
-    for filter in &select_query.filters {
-        if filter.field.source == table_schema.name {
-            filter_fields.insert(&filter.field.name);
+enum Selection {
+    All,
+    Range { from: usize, len: usize },
+    List(Vec<usize>),
+}
+
+pub struct SelectQueryExecutor;
+
+impl SelectQueryExecutor {
+    pub fn call(
+        table_bytes: &[u8],
+        select_query: SelectQuery,
+        table_schemas: HashMap<String, TableSchema>,
+    ) -> Vec<HashMap<String, Value>> {
+        let mut current_selection = Selection::All;
+
+        let filters_left = select_query.filters.clone();
+
+        while !filters_left.is_empty() {
+            // TODO: Greedy algorithm for index selection might not be the best.
+            // Example:
+            //  - Indices:
+            //      - A, A+B, B+C+D+E
+            //  - Filters: A, B, C, D, E
+            //  - Greedy index selection: A+B then nothing
+            //  - Better index selection: A then B+C+D+E
+
+            // Establish current subset
+            let filter_fields: HashSet<&String> = filters_left
+                .iter()
+                .filter_map(|row_filter| {
+                    if row_filter.field.source != select_query.from {
+                        unimplemented!("Row filter and select table does not match.");
+                    }
+
+                    Some(&row_filter.field.name)
+                })
+                .collect();
+
+            if let Some(possible_index) =
+                index_for_query(&table_schemas[&select_query.from], &filter_fields)
+            {
+                // Index lookup.
+                // Result: list of row index
+                // Remove filters from current-filter-set
+                // Update current selection
+                // continue (to next iteration)
+                unimplemented!()
+            } else {
+                // No more index left. Linear scan needed.
+                // Use all filters
+                // Result: list of rows
+                // -> return?
+                unimplemented!()
+            }
         }
+
+        // Materialize the selection and return.
+        SelectQueryExecutor::materialize(
+            current_selection,
+            &table_bytes,
+            table_schemas,
+            select_query,
+        )
     }
 
+    fn materialize(
+        selection: Selection,
+        table_bytes: &[u8],
+        table_schemas: HashMap<String, TableSchema>,
+        select_query: SelectQuery,
+    ) -> Vec<HashMap<String, Value>> {
+        let mut out = vec![];
+
+        let table_byte_len = table_bytes.len();
+        let row_byte_len = table_schemas[&select_query.from].row_byte_size();
+        if table_byte_len % row_byte_len != 0 {
+            panic!(
+                "Invalid table size. Table byte size ({}) is not multiple of row byte size ({}).",
+                table_byte_len, row_byte_len
+            );
+        }
+
+        match selection {
+            Selection::All => {
+                let mut pos = 0usize;
+                while pos < table_byte_len {
+                    let row = parse_row_bytes(
+                        &table_bytes[pos..pos + row_byte_len],
+                        &table_schemas[&select_query.from],
+                    );
+                    out.push(row);
+
+                    pos += row_byte_len;
+                }
+            }
+            Selection::List(positions) => {
+                for pos in positions {
+                    let row = parse_row_bytes(
+                        &table_bytes[pos..pos + row_byte_len],
+                        &table_schemas[&select_query.from],
+                    );
+                    out.push(row);
+                }
+            }
+            Selection::Range { from, len } => {
+                let mut pos = from;
+                let mut i = 0;
+                while i < len {
+                    let row = parse_row_bytes(
+                        &table_bytes[pos..pos + row_byte_len],
+                        &table_schemas[&select_query.from],
+                    );
+                    out.push(row);
+
+                    pos += row_byte_len;
+                    i += 1;
+                }
+            }
+        }
+
+        out
+    }
+}
+
+pub fn index_for_query(
+    table_schema: &TableSchema,
+    filter_fields: &HashSet<&String>,
+) -> Option<String> {
     let ref available_indices = table_schema.indices;
 
     let mut best_index_name: Option<String> = None;
@@ -114,9 +239,8 @@ mod test {
     use indexmap::IndexMap;
 
     use crate::common::Value;
-    use crate::query::{FieldSelector, RowFilter, SelectQuery};
     use crate::query_tools::{find_insert_pos_in_index, index_score};
-    use crate::schema::{FieldSchema, I32FieldSchema, TableSchema};
+    use crate::schema::{FieldSchema, TableSchema};
 
     use super::index_for_query;
 
@@ -153,48 +277,24 @@ mod test {
         let table_schema = TableSchema {
             name: "example".to_string(),
             fields: IndexMap::from([
-                (
-                    "A".to_string(),
-                    FieldSchema::I32(I32FieldSchema { required: true }),
-                ),
-                (
-                    "B".to_string(),
-                    FieldSchema::I32(I32FieldSchema { required: true }),
-                ),
-                (
-                    "C".to_string(),
-                    FieldSchema::I32(I32FieldSchema { required: true }),
-                ),
+                ("A".to_string(), FieldSchema::I32),
+                ("B".to_string(), FieldSchema::I32),
+                ("C".to_string(), FieldSchema::I32),
+                ("D".to_string(), FieldSchema::I32),
             ]),
             indices: HashMap::from([
-                ("index1".to_string(), vec!["A".to_string()]),
-                ("index2".to_string(), vec!["B".to_string(), "C".to_string()]),
+                ("index1".to_string(), vec!["A".to_string(), "B".to_string()]),
+                (
+                    "index2".to_string(),
+                    vec!["B".to_string(), "C".to_string(), "D".to_string()],
+                ),
             ]),
         };
 
-        let select_query = SelectQuery {
-            from: "example".to_string(),
-            filters: vec![
-                RowFilter {
-                    field: FieldSelector {
-                        name: "A".to_string(),
-                        source: "example".to_string(),
-                    },
-                    op: std::cmp::Ordering::Equal,
-                    rhs: crate::common::Value::I32(0),
-                },
-                RowFilter {
-                    field: FieldSelector {
-                        name: "C".to_string(),
-                        source: "example".to_string(),
-                    },
-                    op: std::cmp::Ordering::Equal,
-                    rhs: crate::common::Value::I32(0),
-                },
-            ],
-        };
-
-        let index_name = index_for_query(&table_schema, &select_query);
+        let index_name = index_for_query(
+            &table_schema,
+            &HashSet::from([&"A".to_string(), &"B".to_string()]),
+        );
         assert_eq!(Some("index1".to_string()), index_name);
     }
 
@@ -202,10 +302,7 @@ mod test {
     fn test_find_insert_pos_in_index_single_field_index() {
         let table_schema = TableSchema {
             name: "fake_table".to_string(),
-            fields: IndexMap::from([(
-                "col1".to_string(),
-                FieldSchema::I32(I32FieldSchema { required: true }),
-            )]),
+            fields: IndexMap::from([("col1".to_string(), FieldSchema::I32)]),
             indices: HashMap::from([("fake_index".to_string(), vec!["col1".to_string()])]),
         };
 
@@ -252,14 +349,8 @@ mod test {
         let table_schema = TableSchema {
             name: "fake_table".to_string(),
             fields: IndexMap::from([
-                (
-                    "col1".to_string(),
-                    FieldSchema::I32(I32FieldSchema { required: true }),
-                ),
-                (
-                    "col2".to_string(),
-                    FieldSchema::I32(I32FieldSchema { required: true }),
-                ),
+                ("col1".to_string(), FieldSchema::I32),
+                ("col2".to_string(), FieldSchema::I32),
             ]),
             indices: HashMap::from([(
                 "fake_index".to_string(),

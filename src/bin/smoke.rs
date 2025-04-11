@@ -15,10 +15,7 @@ fn main() {
         let create_table_query = CreateTableQuery {
             schema: TableSchema {
                 name: "example".into(),
-                fields: IndexMap::from([(
-                    "value".into(),
-                    FieldSchema::I32(I32FieldSchema { required: true }),
-                )]),
+                fields: IndexMap::from([("value".into(), FieldSchema::I32)]),
                 indices: HashMap::new(),
             },
         };

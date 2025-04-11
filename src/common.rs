@@ -12,7 +12,7 @@ pub enum PBaseError {
     InvalidTableSizeError,
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Eq)]
+#[derive(Debug, PartialEq, PartialOrd, Eq, Clone)]
 pub enum Value {
     NULL,
     I32(i32),

@@ -27,30 +27,20 @@ impl PBase {
         query: SelectQuery,
     ) -> Result<Vec<HashMap<String, Value>>, Error> {
         let table_file = File::open(table_data_file_name(&self.current_dir, &query.from))?;
+        let mut table_schemas = HashMap::new();
+
         let table_schema: TableSchema = serde_json::from_reader(File::open(
             table_schema_file_name(&self.current_dir, &query.from),
         )?)?;
+        table_schemas.insert(query.from.clone(), table_schema);
 
         let table_file_mmap = unsafe { memmap::MmapOptions::new().map(&table_file)? };
-        let table_byte_len = table_file_mmap.len();
 
-        let row_byte_len = table_schema.row_byte_size();
-
-        if table_byte_len % row_byte_len != 0 {
-            return Err(PBaseError::InvalidTableSizeError.into());
-        }
-
-        let mut rows = vec![];
-        let mut pos = 0usize;
-        while pos < table_byte_len {
-            let row_bytes = &table_file_mmap[pos..pos + row_byte_len];
-            let row = parse_row_bytes(&row_bytes, &table_schema);
-            rows.push(row);
-
-            pos += row_byte_len;
-        }
-
-        Ok(rows)
+        Ok(SelectQueryExecutor::call(
+            &table_file_mmap,
+            query,
+            table_schemas,
+        ))
     }
 
     pub fn run_insert_query(&self, query: InsertQuery) -> Result<usize, Error> {
