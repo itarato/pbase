@@ -1,15 +1,62 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    common::{parse_row_bytes, PBaseError, Value},
-    query::SelectQuery,
+    common::{parse_row_bytes, Value},
+    query::{RowFilter, SelectQuery},
     schema::TableSchema,
 };
 
 enum Selection {
     All,
-    Range { from: usize, len: usize },
-    List(Vec<usize>),
+    List(Vec<usize>), // Line byte positions (not line indices).
+}
+
+struct SelectionIterator<'a> {
+    selection: &'a Selection,
+    row_byte_len: usize,
+    table_byte_len: usize,
+    current_idx: usize,
+}
+
+impl<'a> SelectionIterator<'a> {
+    fn new(
+        selection: &'a Selection,
+        row_byte_len: usize,
+        table_byte_len: usize,
+    ) -> SelectionIterator {
+        SelectionIterator {
+            selection,
+            row_byte_len,
+            table_byte_len,
+            current_idx: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for SelectionIterator<'a> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.selection {
+            Selection::All => {
+                if self.current_idx >= self.table_byte_len {
+                    None
+                } else {
+                    let previous_idx = self.current_idx;
+                    self.current_idx += self.row_byte_len;
+                    Some(previous_idx)
+                }
+            }
+            Selection::List(positions) => {
+                if self.current_idx >= positions.len() {
+                    None
+                } else {
+                    self.current_idx += 1;
+                    Some(positions[self.current_idx - 1])
+                }
+            }
+        }
+    }
 }
 
 pub struct SelectQueryExecutor;
@@ -59,6 +106,13 @@ impl SelectQueryExecutor {
                 // Use all filters
                 // Result: list of rows
                 // -> return?
+                current_selection = SelectQueryExecutor::filter(
+                    current_selection,
+                    &filters_left,
+                    &table_bytes,
+                    &table_schemas,
+                    &select_query,
+                );
                 unimplemented!()
             }
         }
@@ -70,6 +124,25 @@ impl SelectQueryExecutor {
             table_schemas,
             select_query,
         )
+    }
+
+    fn filter(
+        current_selection: Selection,
+        filters_left: &Vec<RowFilter>,
+        table_bytes: &[u8],
+        table_schemas: &HashMap<String, TableSchema>,
+        select_query: &SelectQuery,
+    ) -> Selection {
+        let table_byte_len = table_bytes.len();
+        let row_byte_len = table_schemas[&select_query.from].row_byte_size();
+        if table_byte_len % row_byte_len != 0 {
+            panic!(
+                "Invalid table size. Table byte size ({}) is not multiple of row byte size ({}).",
+                table_byte_len, row_byte_len
+            );
+        }
+
+        unimplemented!()
     }
 
     fn materialize(
@@ -109,20 +182,6 @@ impl SelectQueryExecutor {
                         &table_schemas[&select_query.from],
                     );
                     out.push(row);
-                }
-            }
-            Selection::Range { from, len } => {
-                let mut pos = from;
-                let mut i = 0;
-                while i < len {
-                    let row = parse_row_bytes(
-                        &table_bytes[pos..pos + row_byte_len],
-                        &table_schemas[&select_query.from],
-                    );
-                    out.push(row);
-
-                    pos += row_byte_len;
-                    i += 1;
                 }
             }
         }
