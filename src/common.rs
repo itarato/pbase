@@ -84,8 +84,8 @@ mod test {
         let i32_zero = Value::I32(0);
         let i32_ten = Value::I32(10);
 
-        assert!(null == null);
-        assert!(i32_ten == i32_ten);
+        assert_eq!(null, null);
+        assert_eq!(i32_ten, i32_ten);
 
         assert!(null < i32_zero);
         assert!(null < i32_ten);

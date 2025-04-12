@@ -103,9 +103,6 @@ impl SelectQueryExecutor {
                 unimplemented!()
             } else {
                 // No more index left. Linear scan needed.
-                // Use all filters
-                // Result: list of rows
-                // -> return?
                 current_selection = SelectQueryExecutor::filter(
                     current_selection,
                     &filters_left,
@@ -113,7 +110,6 @@ impl SelectQueryExecutor {
                     &table_schemas,
                     &select_query,
                 );
-                unimplemented!()
             }
         }
 
@@ -142,7 +138,30 @@ impl SelectQueryExecutor {
             );
         }
 
-        unimplemented!()
+        assert!(filters_left.len() > 0);
+
+        let selection_it = SelectionIterator::new(&current_selection, row_byte_len, table_byte_len);
+        let mut filtered_positions = vec![];
+        for pos in selection_it {
+            let row_bytes = &table_bytes[pos..pos + row_byte_len];
+
+            // We need to go through all filters.
+            for filter in filters_left {
+                // Skip if not match.
+                let filter_field_pos =
+                    table_schemas[&filter.field.source].field_byte_pos(&filter.field.name);
+                let field_schema = &table_schemas[&filter.field.source].fields[&filter.field.name];
+                let value = field_schema.value_from_bytes(&row_bytes, filter_field_pos);
+                let is_satisfy = value.cmp(&filter.rhs) == filter.op;
+
+                if is_satisfy {
+                    // Add to filtered positions.
+                    filtered_positions.push(pos);
+                }
+            }
+        }
+
+        Selection::List(filtered_positions)
     }
 
     fn materialize(
