@@ -2,16 +2,18 @@ use std::{fs::File, io::Read, path::PathBuf};
 
 use anyhow::Context;
 use pbase::{
-    common::{index_file_name, table_data_file_name, table_schema_file_name, Error},
+    common::Error,
     schema::{TableSchema, TABLE_PTR_BYTE_SIZE},
+    table_opener::{self, TableOpener},
 };
 
 fn main() -> Result<(), Error> {
     let table_name = "bigtable";
     let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::new());
+    let table_opener = TableOpener::new(current_dir);
 
     // SCHEMA
-    let schema_file_name = table_schema_file_name(&current_dir, &table_name);
+    let schema_file_name = table_opener.table_schema_file_name(&table_name);
     let schema_file = File::open(schema_file_name).context("Failed to open schema file")?;
     let table_schema: TableSchema =
         serde_json::from_reader(schema_file).context("Failed parsing schema")?;
@@ -19,7 +21,7 @@ fn main() -> Result<(), Error> {
     dbg!(&table_schema);
 
     // DATA
-    let data_file_name = table_data_file_name(&current_dir, &table_name);
+    let data_file_name = table_opener.table_data_file_name(&table_name);
     let mut data_file = File::open(data_file_name).context("Cannot open data file")?;
     let mut data_buf: Vec<u8> = vec![];
     data_file
@@ -47,7 +49,7 @@ fn main() -> Result<(), Error> {
     for (index_name, index_fields) in &table_schema.indices {
         println!("Index #{}", index_name);
 
-        let index_file_name = index_file_name(&current_dir, &table_name, &index_name);
+        let index_file_name = table_opener.index_file_name(&table_name, &index_name);
         let mut index_file = File::open(index_file_name).context("Failed opening index file")?;
         let mut index_buf: Vec<u8> = vec![];
         index_file

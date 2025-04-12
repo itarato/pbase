@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::HashMap, path::PathBuf};
+use std::{cmp::Ordering, collections::HashMap};
 
 use thiserror;
 
@@ -39,24 +39,6 @@ impl Ord for Value {
             // _ => panic!("Values cannot be compared {:?} ? {:?}", self, other),
         }
     }
-}
-
-pub fn table_data_file_name(dir: &PathBuf, table_name: &str) -> PathBuf {
-    let mut out = dir.clone();
-    out.push(format!("{}.pbd", table_name));
-    out
-}
-
-pub fn table_schema_file_name(dir: &PathBuf, table_name: &str) -> PathBuf {
-    let mut out = dir.clone();
-    out.push(format!("{}.pbs", table_name));
-    out
-}
-
-pub fn index_file_name(dir: &PathBuf, table_name: &str, index_name: &str) -> PathBuf {
-    let mut out = dir.clone();
-    out.push(format!("{}__{}.pbi", table_name, index_name));
-    out
 }
 
 pub fn parse_row_bytes(bytes: &[u8], schema: &TableSchema) -> HashMap<String, Value> {

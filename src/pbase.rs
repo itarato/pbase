@@ -5,36 +5,36 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{common::*, query::*, query_tools::*, schema::*};
+use crate::{common::*, query::*, query_tools::*, schema::*, table_opener::TableOpener};
 
 use anyhow::Context;
 
 pub struct PBase {
-    current_dir: PathBuf,
+    table_opener: TableOpener,
 }
 
 impl PBase {
     pub fn new(current_dir: PathBuf) -> PBase {
-        PBase { current_dir }
+        PBase {
+            table_opener: TableOpener::new(current_dir),
+        }
     }
 
     pub fn is_table_exist(&self, table_name: &str) -> bool {
-        table_schema_file_name(&self.current_dir, table_name).exists()
+        self.table_opener
+            .table_schema_file_name(table_name)
+            .exists()
     }
 
     pub fn run_select_query(
         &self,
         query: SelectQuery,
     ) -> Result<Vec<HashMap<String, Value>>, Error> {
-        let table_file = File::open(table_data_file_name(&self.current_dir, &query.from))?;
         let mut table_schemas = HashMap::new();
-
-        let table_schema: TableSchema = serde_json::from_reader(File::open(
-            table_schema_file_name(&self.current_dir, &query.from),
-        )?)?;
+        let table_schema: TableSchema = self.table_opener.open_schema(&query.from)?;
         table_schemas.insert(query.from.clone(), table_schema);
 
-        let table_file_mmap = unsafe { memmap::MmapOptions::new().map(&table_file)? };
+        let table_file_mmap = self.table_opener.table_mmap(&query.from)?;
 
         Ok(SelectQueryExecutor::call(
             &table_file_mmap,
@@ -44,16 +44,9 @@ impl PBase {
     }
 
     pub fn run_insert_query(&self, query: InsertQuery) -> Result<usize, Error> {
-        let table_schema: TableSchema = serde_json::from_reader(File::open(
-            table_schema_file_name(&self.current_dir, &query.table),
-        )?)?;
-
+        let table_schema = self.table_opener.open_schema(&query.table)?;
         let bytes = table_schema.data_row_to_bytes(&query.values);
-
-        let mut table_data_file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(table_data_file_name(&self.current_dir, &query.table))?;
+        let mut table_data_file = self.table_opener.table_file_for_insert(&query.table)?;
         let new_row_pos = table_data_file
             .metadata()
             .context("Failed reading table file size")?
@@ -68,14 +61,11 @@ impl PBase {
     }
 
     pub fn run_create_table_query(&self, query: CreateTableQuery) -> Result<(), Error> {
-        let mut schema_file = File::create(table_schema_file_name(
-            &self.current_dir,
-            &query.schema.name,
-        ))?;
-
+        let mut schema_file =
+            File::create(self.table_opener.table_schema_file_name(&query.schema.name))?;
         serde_json::to_writer(&mut schema_file, &query.schema)?;
 
-        File::create(table_data_file_name(&self.current_dir, &query.schema.name))?;
+        File::create(self.table_opener.table_data_file_name(&query.schema.name))?;
 
         println!("Created bigtable");
 
@@ -103,7 +93,7 @@ impl PBase {
             &table_schema.index_row_to_bytes(index_name, &query.values, row_ptr)[..];
 
         // Find position.
-        let index_file_name = index_file_name(&self.current_dir, &query.table, index_name);
+        let index_file_name = self.table_opener.index_file_name(&query.table, index_name);
         let mut index_file = OpenOptions::new()
             .read(true)
             .write(true)

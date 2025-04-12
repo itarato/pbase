@@ -96,14 +96,17 @@ impl SelectQueryExecutor {
                 index_for_query(&table_schemas[&select_query.from], &filter_fields)
             {
                 // Index lookup.
-                // Result: list of row index
-                // Remove filters from current-filter-set
-                // Update current selection
-                // continue (to next iteration)
-                unimplemented!()
+                current_selection = SelectQueryExecutor::index_filter(
+                    &possible_index,
+                    current_selection,
+                    &filters_left,
+                    &table_bytes,
+                    &table_schemas,
+                    &select_query,
+                );
             } else {
                 // No more index left. Linear scan needed.
-                current_selection = SelectQueryExecutor::filter(
+                current_selection = SelectQueryExecutor::scan_filter(
                     current_selection,
                     &filters_left,
                     &table_bytes,
@@ -122,7 +125,38 @@ impl SelectQueryExecutor {
         )
     }
 
-    fn filter(
+    fn index_filter(
+        index_name: &str,
+        current_selection: Selection,
+        filters_left: &Vec<RowFilter>,
+        table_bytes: &[u8],
+        table_schemas: &HashMap<String, TableSchema>,
+        select_query: &SelectQuery,
+    ) -> Selection {
+        // let index_row_byte_len = table_schemas[&select_query.from].index_row_byte_size(index_name);
+        // let index_file_name = index_file_name(dir, table_name, index_name)
+
+        // 1:
+        // Get filter fields
+        // Get index fields
+        // Get crossection ordered
+
+        // 2:
+        // Iterate the crossection in order
+        // Narrow down the index ranges
+        let mut lhs_idx = -1i32;
+        // let mut rhs_idx = inde
+        // for
+
+        // 3:
+        // Collect positions from final range
+
+        // 4:
+        // Return
+        unimplemented!()
+    }
+
+    fn scan_filter(
         current_selection: Selection,
         filters_left: &Vec<RowFilter>,
         table_bytes: &[u8],
