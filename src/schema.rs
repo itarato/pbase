@@ -249,4 +249,27 @@ mod test {
         assert_eq!(4, table_schema.index_field_byte_pos("i1", "f2"));
         assert_eq!(0, table_schema.index_field_byte_pos("i2", "f3"));
     }
+
+    #[test]
+    fn test_parse_row_bytes() {
+        let table_schema = TableSchema {
+            name: "t1".to_string(),
+            fields: IndexMap::from([
+                ("f1".to_string(), FieldSchema::I32),
+                ("f2".to_string(), FieldSchema::I32),
+                ("f3".to_string(), FieldSchema::I32),
+            ]),
+            indices: HashMap::from([
+                ("i1".to_string(), vec!["f1".to_string(), "f2".to_string()]),
+                ("i2".to_string(), vec!["f3".to_string()]),
+            ]),
+        };
+
+        let bytes: [u8; 12] = [1, 2, 3, 4, 5, 5, 5, 5, 6, 7, 8, 9];
+        let values = table_schema.parse_row_bytes(&bytes);
+
+        assert_eq!(Value::I32(0x04030201), values["f1"]);
+        assert_eq!(Value::I32(0x05050505), values["f2"]);
+        assert_eq!(Value::I32(0x09080706), values["f3"]);
+    }
 }
