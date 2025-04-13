@@ -19,11 +19,11 @@ fn main() -> Result<(), Error> {
         from: "bigtable".into(),
         filters: vec![RowFilter {
             field: FieldSelector {
-                name: "field1".to_string(),
+                name: "field3".to_string(),
                 source: "bigtable".to_string(),
             },
             op: std::cmp::Ordering::Equal,
-            rhs: Value::I32(0),
+            rhs: Value::I32(-2),
         }],
         // limit: None,
     };
