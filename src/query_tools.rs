@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    common::{parse_row_bytes, Error, Value},
+    common::{binary_narrow_to_range_exclusive, parse_row_bytes, Error, Value},
     query::{RowFilter, SelectQuery},
     schema::TableSchema,
     table_opener::TableOpener,
@@ -359,47 +359,11 @@ pub fn find_insert_pos_in_index(
         let field_schema = &table_schema.fields[index_field_name];
         let cmp_value = index_values[field_idx];
 
-        // Find pos between lhs_idx and rhs_idx for current level.
-        // Find LHS.
-        let mut i = lhs_idx;
-        let mut j = rhs_idx;
-        loop {
-            if i + 1 >= j {
-                break;
-            }
-
-            let mid = (i + j) / 2;
-            let mid_value_bytes_pos = mid as usize * index_row_size + field_byte_pos;
-            let mid_value = field_schema.value_from_bytes(&index_bytes, mid_value_bytes_pos);
-
-            if &mid_value < cmp_value {
-                i = mid;
-            } else {
-                j = mid;
-            }
-        }
-
-        // Find RHS.
-        lhs_idx = i; // Final.
-        j = rhs_idx;
-
-        loop {
-            if i + 1 >= j {
-                break;
-            }
-
-            let mid = (i + j) / 2;
-            let mid_value_bytes_pos = mid as usize * index_row_size + field_byte_pos;
-            let mid_value = field_schema.value_from_bytes(&index_bytes, mid_value_bytes_pos);
-
-            if &mid_value > cmp_value {
-                j = mid;
-            } else {
-                i = mid;
-            }
-        }
-
-        rhs_idx = j; // Final.
+        (lhs_idx, rhs_idx) = binary_narrow_to_range_exclusive(lhs_idx, rhs_idx, |i| {
+            let value_bytes_pos = i as usize * index_row_size + field_byte_pos;
+            let value = field_schema.value_from_bytes(&index_bytes, value_bytes_pos);
+            value.cmp(cmp_value)
+        });
 
         field_byte_pos += field_schema.byte_size();
         field_idx += 1;
