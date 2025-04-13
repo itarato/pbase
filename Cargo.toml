@@ -12,6 +12,8 @@ memmap = "0.7"
 rand = "0.9"
 sqlite = "0.37"
 anyhow = "1.0"
+log = "0.4"
+env_logger = "0.11"
 
 [[bin]]
 name = "smoke"

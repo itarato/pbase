@@ -1,5 +1,6 @@
 use std::{cmp::Ordering, collections::HashMap};
 
+use log::debug;
 use thiserror;
 
 use crate::schema::TableSchema;
@@ -120,10 +121,10 @@ where
         }
 
         let mid = (i + j) / 2;
-        if pred(mid) == Ordering::Less {
-            i = mid;
-        } else {
+        if pred(mid) == Ordering::Greater {
             j = mid;
+        } else {
+            i = mid;
         }
     }
 }
@@ -148,10 +149,10 @@ where
         }
 
         let mid = (i + j) / 2;
-        if pred(mid) == Ordering::Greater {
-            j = mid;
-        } else {
+        if pred(mid) == Ordering::Less {
             i = mid;
+        } else {
+            j = mid;
         }
     }
 }
@@ -225,12 +226,12 @@ mod test {
                 .cmp(&-10))
         );
         assert_eq!(
-            -1,
+            2,
             binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
                 .cmp(&0))
         );
         assert_eq!(
-            2,
+            5,
             binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
                 .cmp(&1))
         );
@@ -240,13 +241,49 @@ mod test {
                 .cmp(&2))
         );
         assert_eq!(
-            5,
+            8,
             binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
                 .cmp(&3))
         );
         assert_eq!(
             8,
             binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+                .cmp(&10))
+        );
+    }
+
+    #[test]
+    fn test_binary_narrow_to_lower_range_exclusive() {
+        let list = vec![0, 0, 0, 1, 1, 1, 3, 3, 3];
+
+        assert_eq!(
+            0,
+            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+                .cmp(&-10))
+        );
+        assert_eq!(
+            0,
+            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+                .cmp(&0))
+        );
+        assert_eq!(
+            3,
+            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+                .cmp(&1))
+        );
+        assert_eq!(
+            6,
+            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+                .cmp(&2))
+        );
+        assert_eq!(
+            6,
+            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+                .cmp(&3))
+        );
+        assert_eq!(
+            9,
+            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
                 .cmp(&10))
         );
     }

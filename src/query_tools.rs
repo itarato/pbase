@@ -3,6 +3,8 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
+use log::debug;
+
 use crate::{
     common::*,
     query::{RowFilter, SelectQuery},
@@ -10,6 +12,7 @@ use crate::{
     table_opener::TableOpener,
 };
 
+#[derive(Debug)]
 enum Selection {
     All,
     List(Vec<usize>), // Line byte positions (not line indices).
@@ -113,9 +116,12 @@ impl<'a> SelectQueryExecutor<'a> {
 
         if let Some(index_name) = index_for_query(&table_schemas[&self.query.from], &filter_fields)
         {
+            debug!("Using index: {}", &index_name);
+
             // Index lookup.
             selection =
                 self.index_filter(&index_name, &filters_left, &table_schemas[&self.query.from])?;
+            debug!("Index filter result selection: {:?}", &selection);
 
             let index_fields = &table_schema.indices[&index_name];
             filters_left = filters_left
@@ -128,6 +134,8 @@ impl<'a> SelectQueryExecutor<'a> {
                     }
                 })
                 .collect();
+        } else {
+            debug!("No index found");
         }
 
         // Linear scan the rest.
@@ -190,7 +198,7 @@ impl<'a> SelectQueryExecutor<'a> {
                             });
                     }
                     Ordering::Greater => {
-                        rhs_idx = binary_narrow_to_upper_range_exclusive(lhs_idx, rhs_idx, |i| {
+                        lhs_idx = binary_narrow_to_upper_range_exclusive(lhs_idx, rhs_idx, |i| {
                             let index_row_pos = index_row_byte_len * i as usize;
                             let index_value_pos = index_row_pos + index_field_byte_pos;
                             let index_value = index_field_schema
@@ -200,7 +208,7 @@ impl<'a> SelectQueryExecutor<'a> {
                         });
                     }
                     Ordering::Less => {
-                        lhs_idx = binary_narrow_to_lower_range_exclusive(lhs_idx, rhs_idx, |i| {
+                        rhs_idx = binary_narrow_to_lower_range_exclusive(lhs_idx, rhs_idx, |i| {
                             let index_row_pos = index_row_byte_len * i as usize;
                             let index_value_pos = index_row_pos + index_field_byte_pos;
                             let index_value = index_field_schema
@@ -212,6 +220,8 @@ impl<'a> SelectQueryExecutor<'a> {
                 };
             }
         }
+
+        debug!("Index narrowing result range: ({}..{})", lhs_idx, rhs_idx);
 
         // 3:
         // Collect positions from final range.
