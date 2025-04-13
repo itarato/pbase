@@ -56,6 +56,43 @@ pub fn parse_row_bytes(bytes: &[u8], schema: &TableSchema) -> HashMap<String, Va
     out
 }
 
+pub fn binary_narrow_to_range_exclusive<F>(lhs: i32, rhs: i32, pred: F) -> (i32, i32)
+where
+    F: Fn(i32) -> Ordering,
+{
+    let mut i = lhs;
+    let mut j = rhs;
+
+    let lhs_out = loop {
+        if i + 1 >= j {
+            break i;
+        }
+
+        let mid = (i + j) / 2;
+        if pred(mid) == Ordering::Less {
+            i = mid;
+        } else {
+            j = mid;
+        }
+    };
+
+    j = rhs;
+    let rhs_out = loop {
+        if i + 1 >= j {
+            break j;
+        }
+
+        let mid = (i + j) / 2;
+        if pred(mid) == Ordering::Greater {
+            j = mid;
+        } else {
+            i = mid;
+        }
+    };
+
+    (lhs_out, rhs_out)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -83,5 +120,35 @@ mod test {
 
         assert!(i32_zero < i32_ten);
         assert!(i32_zero <= i32_ten);
+    }
+
+    #[test]
+    fn test_binary_narrow_to_range_exclusive() {
+        let list = vec![0, 0, 0, 1, 1, 1, 3, 3, 3];
+
+        assert_eq!(
+            (-1, 0),
+            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&-10))
+        );
+        assert_eq!(
+            (-1, 3),
+            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&0))
+        );
+        assert_eq!(
+            (2, 6),
+            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&1))
+        );
+        assert_eq!(
+            (5, 6),
+            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&2))
+        );
+        assert_eq!(
+            (5, 9),
+            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&3))
+        );
+        assert_eq!(
+            (8, 9),
+            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&10))
+        );
     }
 }
