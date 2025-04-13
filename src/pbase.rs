@@ -68,7 +68,7 @@ impl PBase {
         index_fields: &Vec<String>,
         query: &InsertQuery,
         table_schema: &TableSchema,
-        row_ptr: u64,
+        row_ptr: TablePtrType,
     ) -> Result<(), Error> {
         // TODO:
         // - experiment with memory mapped vs raw file mode.

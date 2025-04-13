@@ -4,9 +4,9 @@ use std::{
 };
 
 use crate::{
-    common::{binary_narrow_to_range_exclusive, parse_row_bytes, Error, Value},
+    common::*,
     query::{RowFilter, SelectQuery},
-    schema::TableSchema,
+    schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
 };
 
@@ -114,12 +114,8 @@ impl<'a> SelectQueryExecutor<'a> {
         if let Some(index_name) = index_for_query(&table_schemas[&self.query.from], &filter_fields)
         {
             // Index lookup.
-            selection = self.index_filter(
-                &index_name,
-                &filters_left,
-                &table_bytes,
-                &table_schemas[&self.query.from],
-            )?;
+            selection =
+                self.index_filter(&index_name, &filters_left, &table_schemas[&self.query.from])?;
 
             let index_fields = &table_schema.indices[&index_name];
             filters_left = filters_left
@@ -147,7 +143,6 @@ impl<'a> SelectQueryExecutor<'a> {
         &self,
         index_name: &str,
         filters_left: &Vec<RowFilter>,
-        table_bytes: &[u8],
         table_schema: &TableSchema,
     ) -> Result<Selection, Error> {
         let index_row_byte_len = table_schema.index_row_byte_size(index_name);
@@ -163,12 +158,10 @@ impl<'a> SelectQueryExecutor<'a> {
                 .push(filter);
         }
 
-        // 1:
+        // 1 / 2:
         // Get filter fields
         // Get index fields
         // Get crossection ordered
-
-        // 2:
         // Iterate the crossection in order
         // Narrow down the index ranges
         let mut lhs_idx = -1i32; // Line index.
@@ -180,44 +173,68 @@ impl<'a> SelectQueryExecutor<'a> {
             }
 
             let index_field_byte_pos = table_schema.index_field_byte_pos(index_name, index_field);
+            let index_field_schema = &table_schema.fields[index_field];
 
             for filter in &filter_by_field_map[index_field] {
                 // Narrow the range.
                 match filter.op {
                     Ordering::Equal => {
-                        (lhs_idx, rhs_idx) = self.narrow_index_range_to_value(
-                            lhs_idx,
-                            rhs_idx,
-                            &index_bytes,
-                            index_row_byte_len,
-                            index_field_byte_pos,
-                            &filter.rhs,
-                        );
+                        (lhs_idx, rhs_idx) =
+                            binary_narrow_to_range_exclusive(lhs_idx, rhs_idx, |i| {
+                                let index_row_pos = index_row_byte_len * i as usize;
+                                let index_value_pos = index_row_pos + index_field_byte_pos;
+                                let index_value = index_field_schema
+                                    .value_from_bytes(&index_bytes[index_value_pos..]);
+
+                                index_value.cmp(&filter.rhs)
+                            });
                     }
-                    Ordering::Greater => unimplemented!(),
-                    Ordering::Less => unimplemented!(),
+                    Ordering::Greater => {
+                        rhs_idx = binary_narrow_to_upper_range_exclusive(lhs_idx, rhs_idx, |i| {
+                            let index_row_pos = index_row_byte_len * i as usize;
+                            let index_value_pos = index_row_pos + index_field_byte_pos;
+                            let index_value = index_field_schema
+                                .value_from_bytes(&index_bytes[index_value_pos..]);
+
+                            index_value.cmp(&filter.rhs)
+                        });
+                    }
+                    Ordering::Less => {
+                        lhs_idx = binary_narrow_to_lower_range_exclusive(lhs_idx, rhs_idx, |i| {
+                            let index_row_pos = index_row_byte_len * i as usize;
+                            let index_value_pos = index_row_pos + index_field_byte_pos;
+                            let index_value = index_field_schema
+                                .value_from_bytes(&index_bytes[index_value_pos..]);
+
+                            index_value.cmp(&filter.rhs)
+                        });
+                    }
                 };
             }
         }
 
         // 3:
-        // Collect positions from final range
+        // Collect positions from final range.
+        let mut i = lhs_idx + 1;
+        let mut out_positions = vec![];
+        while i < rhs_idx {
+            let index_row_pos = i as usize * index_row_byte_len;
+            let index_row_row_idx_field_pos =
+                index_row_pos + table_schema.index_row_ptr_field_byte_pos(index_name);
+
+            let table_row_ptr = TablePtrType::from_le_bytes(
+                index_bytes[index_row_row_idx_field_pos
+                    ..index_row_row_idx_field_pos + TABLE_PTR_BYTE_SIZE]
+                    .try_into()?,
+            );
+            out_positions.push(table_row_ptr as usize);
+
+            i += 1;
+        }
 
         // 4:
-        // Return
-        unimplemented!()
-    }
-
-    fn narrow_index_range_to_value(
-        &self,
-        lhs_idx: i32, // Line index.
-        rhs_idx: i32, // Line index.
-        index_bytes: &[u8],
-        index_row_byte_len: usize,
-        index_field_byte_pos: usize,
-        cmp_value: &Value,
-    ) -> (i32, i32) {
-        unimplemented!()
+        // Return.
+        Ok(Selection::List(out_positions))
     }
 
     fn scan_filter(
@@ -249,7 +266,7 @@ impl<'a> SelectQueryExecutor<'a> {
                 let filter_field_pos =
                     table_schemas[&filter.field.source].field_byte_pos(&filter.field.name);
                 let field_schema = &table_schemas[&filter.field.source].fields[&filter.field.name];
-                let value = field_schema.value_from_bytes(&row_bytes, filter_field_pos);
+                let value = field_schema.value_from_bytes(&row_bytes[filter_field_pos..]);
                 let is_satisfy = value.cmp(&filter.rhs) == filter.op;
 
                 if is_satisfy {
@@ -361,7 +378,7 @@ pub fn find_insert_pos_in_index(
 
         (lhs_idx, rhs_idx) = binary_narrow_to_range_exclusive(lhs_idx, rhs_idx, |i| {
             let value_bytes_pos = i as usize * index_row_size + field_byte_pos;
-            let value = field_schema.value_from_bytes(&index_bytes, value_bytes_pos);
+            let value = field_schema.value_from_bytes(&index_bytes[value_bytes_pos..]);
             value.cmp(cmp_value)
         });
 

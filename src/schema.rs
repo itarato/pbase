@@ -4,7 +4,8 @@ use std::collections::HashMap;
 
 use crate::common::Value;
 
-pub const TABLE_PTR_BYTE_SIZE: usize = std::mem::size_of::<u64>();
+pub type TablePtrType = u64;
+pub const TABLE_PTR_BYTE_SIZE: usize = std::mem::size_of::<TablePtrType>();
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FieldSchema {
@@ -18,8 +19,8 @@ impl FieldSchema {
         }
     }
 
-    pub fn value_from_bytes(&self, bytes: &[u8], pos: usize) -> Value {
-        let value_bytes = &bytes[pos..pos + self.byte_size()];
+    pub fn value_from_bytes(&self, bytes: &[u8]) -> Value {
+        let value_bytes = &bytes[0..self.byte_size()];
         match self {
             FieldSchema::I32 => {
                 let value = i32::from_le_bytes(
@@ -87,7 +88,7 @@ impl TableSchema {
         &self,
         index_name: &str,
         values: &HashMap<String, Value>,
-        row_ptr: u64,
+        row_ptr: TablePtrType,
     ) -> Vec<u8> {
         let mut out = vec![];
         out.resize(self.index_row_byte_size(index_name), 0u8);
@@ -118,6 +119,10 @@ impl TableSchema {
         }
 
         unreachable!()
+    }
+
+    pub fn index_row_ptr_field_byte_pos(&self, index_name: &str) -> usize {
+        self.index_row_byte_size(index_name) - TABLE_PTR_BYTE_SIZE
     }
 }
 

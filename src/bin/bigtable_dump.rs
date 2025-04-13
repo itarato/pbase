@@ -3,7 +3,7 @@ use std::{fs::File, io::Read, path::PathBuf};
 use anyhow::Context;
 use pbase::{
     common::Error,
-    schema::{TableSchema, TABLE_PTR_BYTE_SIZE},
+    schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
 };
 
@@ -35,7 +35,7 @@ fn main() -> Result<(), Error> {
 
         let mut field_pos = 0usize;
         for (field_name, field_schema) in &table_schema.fields {
-            let value = field_schema.value_from_bytes(&data_buf, pos + field_pos);
+            let value = field_schema.value_from_bytes(&data_buf[(pos + field_pos)..]);
             println!("\t{} = {:?}", field_name, value);
 
             field_pos += field_schema.byte_size();
@@ -63,13 +63,13 @@ fn main() -> Result<(), Error> {
             println!("\tRow #{}:", row_idx);
             let mut field_pos = 0usize;
             for index_field in index_fields {
-                let value =
-                    table_schema.fields[index_field].value_from_bytes(&index_buf, pos + field_pos);
+                let value = table_schema.fields[index_field]
+                    .value_from_bytes(&index_buf[(pos + field_pos)..]);
                 println!("\t\t{} = {:?}", index_field, value);
 
                 field_pos += table_schema.fields[index_field].byte_size();
             }
-            let row_ptr: u64 = u64::from_le_bytes(
+            let row_ptr: TablePtrType = TablePtrType::from_le_bytes(
                 index_buf[field_pos + pos..field_pos + pos + TABLE_PTR_BYTE_SIZE].try_into()?,
             );
             println!("\t\tPTR = #{}", row_ptr);
