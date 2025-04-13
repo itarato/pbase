@@ -14,10 +14,10 @@ fn main() {
         let insert_query = InsertQuery {
             table: "bigtable".into(),
             values: HashMap::from([
-                ("field1".into(), Value::I32(rng.random::<i32>() % 1000)),
-                ("field2".into(), Value::I32(rng.random::<i32>() % 1000)),
-                ("field3".into(), Value::I32(rng.random::<i32>() % 1000)),
-                ("field4".into(), Value::I32(rng.random::<i32>() % 1000)),
+                ("field1".into(), Value::I32(rng.random::<i32>() % 5)),
+                ("field2".into(), Value::I32(rng.random::<i32>() % 5)),
+                ("field3".into(), Value::I32(rng.random::<i32>() % 5)),
+                ("field4".into(), Value::I32(rng.random::<i32>() % 5)),
             ]),
         };
         if let Err(err) = db.run_insert_query(insert_query) {

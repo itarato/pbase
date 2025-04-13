@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 
-use pbase::{common::Error, pbase::PBase, query::SelectQuery};
+use pbase::{
+    common::{Error, Value},
+    pbase::PBase,
+    query::{FieldSelector, RowFilter, SelectQuery},
+};
 
 fn main() -> Result<(), Error> {
     let db = PBase::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::new()));
@@ -11,7 +15,14 @@ fn main() -> Result<(), Error> {
         //     source: "bigtable".into(),
         // }],
         from: "bigtable".into(),
-        filters: vec![],
+        filters: vec![RowFilter {
+            field: FieldSelector {
+                name: "field1".to_string(),
+                source: "bigtable".to_string(),
+            },
+            op: std::cmp::Ordering::Greater,
+            rhs: Value::I32(0),
+        }],
         // limit: None,
     };
 
