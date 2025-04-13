@@ -1,8 +1,6 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::cmp::Ordering;
 
 use thiserror;
-
-use crate::{schema::TableSchema, value::Value};
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -10,21 +8,6 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub enum PBaseError {
     #[error("Table size is invalid")]
     InvalidTableSizeError,
-}
-
-pub fn parse_row_bytes(bytes: &[u8], schema: &TableSchema) -> HashMap<String, Value> {
-    let mut out = HashMap::new();
-
-    let mut pos = 0usize;
-    for (field_name, field_schema) in &schema.fields {
-        out.insert(
-            field_name.clone(),
-            field_schema.value_from_bytes(&bytes[pos..]),
-        );
-        pos += field_schema.byte_size();
-    }
-
-    out
 }
 
 ///

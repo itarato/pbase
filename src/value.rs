@@ -57,4 +57,12 @@ mod test {
         assert!(i32_zero < i32_ten);
         assert!(i32_zero <= i32_ten);
     }
+
+    #[test]
+    fn test_copy_bytes_to() {
+        let mut buf: [u8; 6] = [0; 6];
+        Value::I32(0x04030201).copy_bytes_to(&mut buf[1..]);
+
+        assert_eq!(vec![0, 1, 2, 3, 4, 0], buf);
+    }
 }

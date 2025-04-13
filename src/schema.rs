@@ -124,6 +124,21 @@ impl TableSchema {
     pub fn index_row_ptr_field_byte_pos(&self, index_name: &str) -> usize {
         self.index_row_byte_size(index_name) - TABLE_PTR_BYTE_SIZE
     }
+
+    pub fn parse_row_bytes(&self, bytes: &[u8]) -> HashMap<String, Value> {
+        let mut out = HashMap::new();
+
+        let mut pos = 0usize;
+        for (field_name, field_schema) in &self.fields {
+            out.insert(
+                field_name.clone(),
+                field_schema.value_from_bytes(&bytes[pos..]),
+            );
+            pos += field_schema.byte_size();
+        }
+
+        out
+    }
 }
 
 pub struct DatabaseSchema {

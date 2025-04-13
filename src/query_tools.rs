@@ -311,10 +311,8 @@ impl<'a> SelectQueryExecutor<'a> {
             Selection::All => {
                 let mut pos = 0usize;
                 while pos < table_byte_len {
-                    let row = parse_row_bytes(
-                        &table_bytes[pos..pos + row_byte_len],
-                        &table_schemas[&self.query.from],
-                    );
+                    let row = table_schemas[&self.query.from]
+                        .parse_row_bytes(&table_bytes[pos..pos + row_byte_len]);
                     out.push(row);
 
                     pos += row_byte_len;
@@ -322,10 +320,8 @@ impl<'a> SelectQueryExecutor<'a> {
             }
             Selection::List(positions) => {
                 for pos in positions {
-                    let row = parse_row_bytes(
-                        &table_bytes[pos..pos + row_byte_len],
-                        &table_schemas[&self.query.from],
-                    );
+                    let row = table_schemas[&self.query.from]
+                        .parse_row_bytes(&table_bytes[pos..pos + row_byte_len]);
                     out.push(row);
                 }
             }
