@@ -2,7 +2,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::common::Value;
+use crate::value::Value;
 
 pub type TablePtrType = u64;
 pub const TABLE_PTR_BYTE_SIZE: usize = std::mem::size_of::<TablePtrType>();
@@ -78,7 +78,7 @@ impl TableSchema {
         bytes.resize(self.row_byte_size(), 0u8);
 
         for (field_name, field_value) in values {
-            field_value.copy_bytes_to(&mut bytes, self.field_byte_pos(field_name));
+            field_value.copy_bytes_to(&mut bytes[self.field_byte_pos(field_name)..]);
         }
 
         bytes
@@ -97,7 +97,7 @@ impl TableSchema {
         for index_field in &self.indices[index_name] {
             let field_byte_size = self.fields[index_field].byte_size();
             if let Some(value) = values.get(index_field) {
-                value.copy_bytes_to(&mut out, pos);
+                value.copy_bytes_to(&mut out[pos..]);
             }
 
             pos += field_byte_size;
@@ -136,7 +136,7 @@ mod test {
 
     use indexmap::IndexMap;
 
-    use crate::{common::Value, schema::FieldSchema};
+    use crate::{schema::FieldSchema, value::Value};
 
     use super::TableSchema;
 

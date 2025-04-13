@@ -3,10 +3,10 @@ use std::path::PathBuf;
 
 use indexmap::IndexMap;
 
-use pbase::common::*;
 use pbase::pbase::*;
 use pbase::query::*;
 use pbase::schema::*;
+use pbase::value::*;
 
 fn main() {
     let db = PBase::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::new()));

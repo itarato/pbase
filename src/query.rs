@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::HashMap};
 
-use crate::{common::Value, schema::TableSchema};
+use crate::{schema::TableSchema, value::Value};
 
 #[derive(Clone)]
 pub struct FieldSelector {

@@ -10,6 +10,7 @@ use crate::{
     query::{RowFilter, SelectQuery},
     schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
+    value::Value,
 };
 
 #[derive(Debug)]
@@ -405,9 +406,9 @@ mod test {
 
     use indexmap::IndexMap;
 
-    use crate::common::Value;
     use crate::query_tools::{find_insert_pos_in_index, index_score};
     use crate::schema::{FieldSchema, TableSchema};
+    use crate::value::Value;
 
     use super::index_for_query;
 

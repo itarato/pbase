@@ -1,9 +1,8 @@
 use std::{cmp::Ordering, collections::HashMap};
 
-use log::debug;
 use thiserror;
 
-use crate::schema::TableSchema;
+use crate::{schema::TableSchema, value::Value};
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -11,35 +10,6 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub enum PBaseError {
     #[error("Table size is invalid")]
     InvalidTableSizeError,
-}
-
-#[derive(Debug, PartialEq, PartialOrd, Eq, Clone)]
-pub enum Value {
-    NULL,
-    I32(i32),
-}
-
-impl Value {
-    pub fn copy_bytes_to(&self, buf: &mut [u8], pos: usize) {
-        match self {
-            Value::NULL => {} // Noop.
-            Value::I32(v) => buf[pos..pos + 4].copy_from_slice(&v.to_le_bytes()),
-        };
-    }
-}
-
-impl Ord for Value {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Value::NULL, Value::NULL) => Ordering::Equal,
-
-            (Value::NULL, Value::I32(_)) => Ordering::Less,
-            (Value::I32(_), Value::NULL) => Ordering::Greater,
-
-            (Value::I32(lhs), Value::I32(rhs)) => lhs.cmp(rhs),
-            // _ => panic!("Values cannot be compared {:?} ? {:?}", self, other),
-        }
-    }
 }
 
 pub fn parse_row_bytes(bytes: &[u8], schema: &TableSchema) -> HashMap<String, Value> {
@@ -160,31 +130,6 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn test_value_ordering() {
-        let null = Value::NULL;
-        let i32_zero = Value::I32(0);
-        let i32_ten = Value::I32(10);
-
-        assert_eq!(null, null);
-        assert_eq!(i32_ten, i32_ten);
-
-        assert!(null < i32_zero);
-        assert!(null < i32_ten);
-
-        assert!(null <= i32_zero);
-        assert!(null <= i32_ten);
-
-        assert!(i32_zero > null);
-        assert!(i32_ten > null);
-
-        assert!(i32_zero >= null);
-        assert!(i32_ten >= null);
-
-        assert!(i32_zero < i32_ten);
-        assert!(i32_zero <= i32_ten);
-    }
 
     #[test]
     fn test_binary_narrow_to_range_exclusive() {
