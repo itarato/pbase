@@ -30,17 +30,7 @@ impl PBase {
         &self,
         query: SelectQuery,
     ) -> Result<Vec<HashMap<String, Value>>, Error> {
-        let mut table_schemas = HashMap::new();
-        let table_schema: TableSchema = self.table_opener.open_schema(&query.from)?;
-        table_schemas.insert(query.from.clone(), table_schema);
-
-        let table_file_mmap = self.table_opener.table_mmap(&query.from)?;
-
-        Ok(SelectQueryExecutor::call(
-            &table_file_mmap,
-            query,
-            table_schemas,
-        ))
+        SelectQueryExecutor::new(&self.table_opener, query).call()
     }
 
     pub fn run_insert_query(&self, query: InsertQuery) -> Result<usize, Error> {

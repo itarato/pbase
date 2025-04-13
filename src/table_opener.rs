@@ -39,6 +39,11 @@ impl TableOpener {
         Ok(unsafe { memmap::MmapOptions::new().map(&table_file)? })
     }
 
+    pub fn index_mmap(&self, table_schema: &TableSchema, index_name: &str) -> Result<Mmap, Error> {
+        let index_file = File::open(self.index_file_name(&table_schema.name, &index_name))?;
+        Ok(unsafe { memmap::MmapOptions::new().map(&index_file)? })
+    }
+
     pub fn open_schema(&self, table_name: &str) -> Result<TableSchema, Error> {
         let schema_file = File::open(self.table_schema_file_name(table_name))?;
         let table_schema = serde_json::from_reader(schema_file)?;

@@ -4,7 +4,7 @@ use anyhow::Context;
 use pbase::{
     common::Error,
     schema::{TableSchema, TABLE_PTR_BYTE_SIZE},
-    table_opener::{self, TableOpener},
+    table_opener::TableOpener,
 };
 
 fn main() -> Result<(), Error> {

@@ -1,9 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+};
 
 use crate::{
-    common::{parse_row_bytes, Value},
+    common::{parse_row_bytes, Error, Value},
     query::{RowFilter, SelectQuery},
     schema::TableSchema,
+    table_opener::TableOpener,
 };
 
 enum Selection {
@@ -23,7 +27,7 @@ impl<'a> SelectionIterator<'a> {
         selection: &'a Selection,
         row_byte_len: usize,
         table_byte_len: usize,
-    ) -> SelectionIterator {
+    ) -> SelectionIterator<'a> {
         SelectionIterator {
             selection,
             row_byte_len,
@@ -59,82 +63,105 @@ impl<'a> Iterator for SelectionIterator<'a> {
     }
 }
 
-pub struct SelectQueryExecutor;
+pub struct SelectQueryExecutor<'a> {
+    table_opener: &'a TableOpener,
+    query: SelectQuery,
+}
 
-impl SelectQueryExecutor {
-    pub fn call(
-        table_bytes: &[u8],
-        select_query: SelectQuery,
-        table_schemas: HashMap<String, TableSchema>,
-    ) -> Vec<HashMap<String, Value>> {
-        let mut current_selection = Selection::All;
+impl<'a> SelectQueryExecutor<'a> {
+    pub fn new(table_opener: &'a TableOpener, query: SelectQuery) -> SelectQueryExecutor<'a> {
+        SelectQueryExecutor {
+            table_opener,
+            query,
+        }
+    }
 
-        let filters_left = select_query.filters.clone();
+    pub fn call(&self) -> Result<Vec<HashMap<String, Value>>, Error> {
+        let mut table_schemas = HashMap::new();
+        let table_schema: TableSchema = self.table_opener.open_schema(&self.query.from)?;
+        table_schemas.insert(self.query.from.clone(), &table_schema);
 
-        while !filters_left.is_empty() {
-            // TODO: Greedy algorithm for index selection might not be the best.
-            // Example:
-            //  - Indices:
-            //      - A, A+B, B+C+D+E
-            //  - Filters: A, B, C, D, E
-            //  - Greedy index selection: A+B then nothing
-            //  - Better index selection: A then B+C+D+E
+        let table_file_mmap = self.table_opener.table_mmap(&self.query.from)?;
+        let table_bytes = &table_file_mmap[..];
 
-            // Establish current subset
-            let filter_fields: HashSet<&String> = filters_left
-                .iter()
-                .filter_map(|row_filter| {
-                    if row_filter.field.source != select_query.from {
-                        unimplemented!("Row filter and select table does not match.");
+        let mut selection = Selection::All;
+
+        // TODO: Greedy algorithm for index selection might not be the best.
+        // Example:
+        //  - Indices:
+        //      - A, A+B, B+C+D+E
+        //  - Filters: A, B, C, D, E
+        //  - Greedy index selection: A+B then nothing
+        //  - Better index selection: A then B+C+D+E
+
+        // NOTE: We're only doing a single index filter (if there is one change at least).
+        // There might be a better performance to evaluate more than one and using a crossecton of the pos-list results. Later.
+
+        let mut filters_left = self.query.filters.clone();
+
+        // Establish current subset
+        let filter_fields: HashSet<&String> = filters_left
+            .iter()
+            .filter_map(|row_filter| {
+                if row_filter.field.source != self.query.from {
+                    unimplemented!("Row filter and select table does not match.");
+                }
+
+                Some(&row_filter.field.name)
+            })
+            .collect();
+
+        if let Some(index_name) = index_for_query(&table_schemas[&self.query.from], &filter_fields)
+        {
+            // Index lookup.
+            selection = self.index_filter(
+                &index_name,
+                &filters_left,
+                &table_bytes,
+                &table_schemas[&self.query.from],
+            )?;
+
+            let index_fields = &table_schema.indices[&index_name];
+            filters_left = filters_left
+                .into_iter()
+                .filter_map(|filter| {
+                    if index_fields.contains(&filter.field.name) {
+                        None
+                    } else {
+                        Some(filter)
                     }
-
-                    Some(&row_filter.field.name)
                 })
                 .collect();
+        }
 
-            if let Some(possible_index) =
-                index_for_query(&table_schemas[&select_query.from], &filter_fields)
-            {
-                // Index lookup.
-                current_selection = SelectQueryExecutor::index_filter(
-                    &possible_index,
-                    current_selection,
-                    &filters_left,
-                    &table_bytes,
-                    &table_schemas,
-                    &select_query,
-                );
-            } else {
-                // No more index left. Linear scan needed.
-                current_selection = SelectQueryExecutor::scan_filter(
-                    current_selection,
-                    &filters_left,
-                    &table_bytes,
-                    &table_schemas,
-                    &select_query,
-                );
-            }
+        // Linear scan the rest.
+        if !filters_left.is_empty() {
+            selection = self.scan_filter(selection, &filters_left, &table_bytes, &table_schemas);
         }
 
         // Materialize the selection and return.
-        SelectQueryExecutor::materialize(
-            current_selection,
-            &table_bytes,
-            table_schemas,
-            select_query,
-        )
+        Ok(self.materialize(selection, &table_bytes, table_schemas))
     }
 
     fn index_filter(
+        &self,
         index_name: &str,
-        current_selection: Selection,
         filters_left: &Vec<RowFilter>,
         table_bytes: &[u8],
-        table_schemas: &HashMap<String, TableSchema>,
-        select_query: &SelectQuery,
-    ) -> Selection {
-        // let index_row_byte_len = table_schemas[&select_query.from].index_row_byte_size(index_name);
-        // let index_file_name = index_file_name(dir, table_name, index_name)
+        table_schema: &TableSchema,
+    ) -> Result<Selection, Error> {
+        let index_row_byte_len = table_schema.index_row_byte_size(index_name);
+        let index_mmap = self.table_opener.index_mmap(&table_schema, &index_name)?;
+        let index_bytes = &index_mmap[..];
+        let index_fields = &table_schema.indices[index_name];
+
+        let mut filter_by_field_map: HashMap<&String, Vec<&RowFilter>> = HashMap::new();
+        for filter in filters_left {
+            filter_by_field_map
+                .entry(&filter.field.name)
+                .or_insert(vec![])
+                .push(filter);
+        }
 
         // 1:
         // Get filter fields
@@ -144,9 +171,34 @@ impl SelectQueryExecutor {
         // 2:
         // Iterate the crossection in order
         // Narrow down the index ranges
-        let mut lhs_idx = -1i32;
-        // let mut rhs_idx = inde
-        // for
+        let mut lhs_idx = -1i32; // Line index.
+        let mut rhs_idx = (index_bytes.len() / index_row_byte_len) as i32; // Line index.
+        for index_field in index_fields {
+            if !filter_by_field_map.contains_key(index_field) {
+                // No more filters to leverage the index columns.
+                break;
+            }
+
+            let index_field_byte_pos = table_schema.index_field_byte_pos(index_name, index_field);
+
+            for filter in &filter_by_field_map[index_field] {
+                // Narrow the range.
+                match filter.op {
+                    Ordering::Equal => {
+                        (lhs_idx, rhs_idx) = self.narrow_index_range_to_value(
+                            lhs_idx,
+                            rhs_idx,
+                            &index_bytes,
+                            index_row_byte_len,
+                            index_field_byte_pos,
+                            &filter.rhs,
+                        );
+                    }
+                    Ordering::Greater => unimplemented!(),
+                    Ordering::Less => unimplemented!(),
+                };
+            }
+        }
 
         // 3:
         // Collect positions from final range
@@ -156,15 +208,27 @@ impl SelectQueryExecutor {
         unimplemented!()
     }
 
+    fn narrow_index_range_to_value(
+        &self,
+        lhs_idx: i32, // Line index.
+        rhs_idx: i32, // Line index.
+        index_bytes: &[u8],
+        index_row_byte_len: usize,
+        index_field_byte_pos: usize,
+        cmp_value: &Value,
+    ) -> (i32, i32) {
+        unimplemented!()
+    }
+
     fn scan_filter(
+        &self,
         current_selection: Selection,
         filters_left: &Vec<RowFilter>,
         table_bytes: &[u8],
-        table_schemas: &HashMap<String, TableSchema>,
-        select_query: &SelectQuery,
+        table_schemas: &HashMap<String, &TableSchema>,
     ) -> Selection {
         let table_byte_len = table_bytes.len();
-        let row_byte_len = table_schemas[&select_query.from].row_byte_size();
+        let row_byte_len = table_schemas[&self.query.from].row_byte_size();
         if table_byte_len % row_byte_len != 0 {
             panic!(
                 "Invalid table size. Table byte size ({}) is not multiple of row byte size ({}).",
@@ -199,15 +263,15 @@ impl SelectQueryExecutor {
     }
 
     fn materialize(
+        &self,
         selection: Selection,
         table_bytes: &[u8],
-        table_schemas: HashMap<String, TableSchema>,
-        select_query: SelectQuery,
+        table_schemas: HashMap<String, &TableSchema>,
     ) -> Vec<HashMap<String, Value>> {
         let mut out = vec![];
 
         let table_byte_len = table_bytes.len();
-        let row_byte_len = table_schemas[&select_query.from].row_byte_size();
+        let row_byte_len = table_schemas[&self.query.from].row_byte_size();
         if table_byte_len % row_byte_len != 0 {
             panic!(
                 "Invalid table size. Table byte size ({}) is not multiple of row byte size ({}).",
@@ -221,7 +285,7 @@ impl SelectQueryExecutor {
                 while pos < table_byte_len {
                     let row = parse_row_bytes(
                         &table_bytes[pos..pos + row_byte_len],
-                        &table_schemas[&select_query.from],
+                        &table_schemas[&self.query.from],
                     );
                     out.push(row);
 
@@ -232,7 +296,7 @@ impl SelectQueryExecutor {
                 for pos in positions {
                     let row = parse_row_bytes(
                         &table_bytes[pos..pos + row_byte_len],
-                        &table_schemas[&select_query.from],
+                        &table_schemas[&self.query.from],
                     );
                     out.push(row);
                 }
