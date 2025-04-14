@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use indexmap::IndexMap;
 use pbase::{
     common::Error,
     pbase::PBase,
@@ -18,6 +19,7 @@ fn main() -> Result<(), Error> {
         //     source: "bigtable".into(),
         // }],
         from: "bigtable".into(),
+        joins: IndexMap::new(),
         filters: vec![RowFilter {
             field: FieldSelector {
                 name: "field3".to_string(),
