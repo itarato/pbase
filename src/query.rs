@@ -1,5 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap};
 
+use indexmap::IndexMap;
+
 use crate::{schema::TableSchema, value::Value};
 
 #[derive(Clone)]
@@ -15,9 +17,15 @@ pub struct RowFilter {
     pub rhs: Value,
 }
 
+pub struct JoinContract {
+    joined_table_field: String,
+    reference: FieldSelector,
+}
+
 pub struct SelectQuery {
     // pub result: Vec<FieldSelector>,
     pub from: String,
+    pub joins: IndexMap<String, JoinContract>,
     // List of AND-ed filters.
     pub filters: Vec<RowFilter>,
     // pub limit: Option<usize>,
