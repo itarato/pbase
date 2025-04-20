@@ -37,10 +37,10 @@ impl<'a> SelectQueryExecutor<'a> {
             self.query.from.as_str(),
             self.table_opener.table_mmap(&self.query.from)?,
         );
-        for (join_table, _) in &self.query.joins {
+        for join_contract in &self.query.joins {
             table_bytes_map.insert(
-                join_table.as_str(),
-                self.table_opener.table_mmap(&join_table)?,
+                &join_contract.rhs.source,
+                self.table_opener.table_mmap(&join_contract.rhs.source)?,
             );
         }
 
@@ -53,12 +53,12 @@ impl<'a> SelectQueryExecutor<'a> {
                 &table_schemas[&self.query.from],
             )?,
         );
-        for (join_table, _) in &self.query.joins {
+        for join_contract in &self.query.joins {
             selections.insert(
                 self.query.from.as_str(),
                 self.execute_filters_on_single_tables(
-                    &table_bytes_map[join_table.as_str()][..],
-                    &table_schemas[join_table],
+                    &table_bytes_map[join_contract.rhs.source.as_str()][..],
+                    &table_schemas[&join_contract.rhs.source],
                 )?,
             );
         }
@@ -167,10 +167,10 @@ impl<'a> SelectQueryExecutor<'a> {
         );
 
         // Join table schemas.
-        for (join_table, _) in &self.query.joins {
+        for join_contract in &self.query.joins {
             table_schemas.insert(
-                join_table.clone(),
-                self.table_opener.open_schema(&join_table)?,
+                join_contract.rhs.source.clone(),
+                self.table_opener.open_schema(&join_contract.rhs.source)?,
             );
         }
 

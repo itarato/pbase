@@ -1,12 +1,10 @@
-use std::path::PathBuf;
-
-use indexmap::IndexMap;
 use pbase::{
     common::Error,
     pbase::PBase,
     query::{FieldSelector, RowFilter, SelectQuery},
     value::*,
 };
+use std::path::PathBuf;
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -19,7 +17,7 @@ fn main() -> Result<(), Error> {
         //     source: "bigtable".into(),
         // }],
         from: "bigtable".into(),
-        joins: IndexMap::new(),
+        joins: vec![],
         filters: vec![RowFilter {
             field: FieldSelector {
                 name: "field3".to_string(),

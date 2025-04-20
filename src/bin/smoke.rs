@@ -37,7 +37,7 @@ fn main() {
         //     source: "example".into(),
         // }],
         from: "example".into(),
-        joins: IndexMap::new(),
+        joins: vec![],
         filters: vec![],
         // limit: None,
     };

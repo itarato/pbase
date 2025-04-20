@@ -70,7 +70,7 @@ fn test_basic_single_table_create_and_load() {
     // Query.
     let query = SelectQuery {
         from: "testtable".into(),
-        joins: IndexMap::new(),
+        joins: vec![],
         filters: vec![RowFilter {
             field: FieldSelector {
                 name: "field1".to_string(),
@@ -88,7 +88,7 @@ fn test_basic_single_table_create_and_load() {
 
     let query = SelectQuery {
         from: "testtable".into(),
-        joins: IndexMap::new(),
+        joins: vec![],
         filters: vec![RowFilter {
             field: FieldSelector {
                 name: "field1".to_string(),
@@ -106,7 +106,7 @@ fn test_basic_single_table_create_and_load() {
 
     let query = SelectQuery {
         from: "testtable".into(),
-        joins: IndexMap::new(),
+        joins: vec![],
         filters: vec![RowFilter {
             field: FieldSelector {
                 name: "field1".to_string(),

@@ -142,7 +142,7 @@ fn test_one_join_table_create_and_load() {
     // Total t1 query.
     let query = SelectQuery {
         from: "t1".into(),
-        joins: IndexMap::new(),
+        joins: vec![],
         filters: vec![],
     };
 
@@ -153,7 +153,7 @@ fn test_one_join_table_create_and_load() {
     // Total t2 query.
     let query = SelectQuery {
         from: "t2".into(),
-        joins: IndexMap::new(),
+        joins: vec![],
         filters: vec![],
     };
 
@@ -167,17 +167,17 @@ fn test_one_join_table_create_and_load() {
     // JOIN t2 ON t2.t1_id = t1.id
     let query = SelectQuery {
         from: "t1".into(),
-        joins: IndexMap::from([(
-            "t2".into(),
-            JoinContract {
-                join_type: pbase::query::JoinType::Left,
-                rhs_field: "t1_id".into(),
-                lhs_field: FieldSelector {
-                    name: "id".into(),
-                    source: "t1".into(),
-                },
+        joins: vec![JoinContract {
+            join_type: pbase::query::JoinType::Inner,
+            lhs: FieldSelector {
+                name: "id".into(),
+                source: "t1".into(),
             },
-        )]),
+            rhs: FieldSelector {
+                name: "t1_id".into(),
+                source: "t2".into(),
+            },
+        }],
         filters: vec![],
     };
 }

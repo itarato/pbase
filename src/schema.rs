@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, ops::Index};
+use std::collections::HashMap;
 
 use crate::value::Value;
 
@@ -9,12 +9,14 @@ pub const TABLE_PTR_BYTE_SIZE: usize = std::mem::size_of::<TablePtrType>();
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FieldSchema {
+    U8,
     I32,
 }
 
 impl FieldSchema {
     pub fn byte_size(&self) -> usize {
         match self {
+            FieldSchema::U8 => 1,
             FieldSchema::I32 => 4,
         }
     }
@@ -22,6 +24,7 @@ impl FieldSchema {
     pub fn value_from_bytes(&self, bytes: &[u8]) -> Value {
         let value_bytes = &bytes[0..self.byte_size()];
         match self {
+            FieldSchema::U8 => Value::U8(value_bytes[0]),
             FieldSchema::I32 => {
                 let value = i32::from_le_bytes(
                     value_bytes.try_into().expect("slice with incorrect length"),
@@ -144,13 +147,19 @@ impl TableSchema {
 pub struct TableReader<'a> {
     table_schema: &'a TableSchema,
     row_bytes: &'a [u8],
+    pub absolute_pos: usize,
 }
 
 impl<'a> TableReader<'a> {
-    fn new(table_schema: &'a TableSchema, row_bytes: &'a [u8]) -> TableReader<'a> {
+    pub fn new(
+        table_schema: &'a TableSchema,
+        row_bytes: &'a [u8],
+        absolute_pos: usize,
+    ) -> TableReader<'a> {
         TableReader {
             table_schema,
             row_bytes,
+            absolute_pos,
         }
     }
 
@@ -189,6 +198,7 @@ impl<'a> Iterator for TableRowIterator<'a> {
             Some(TableReader::new(
                 &self.table_schema,
                 &self.table_bytes[pos..pos + self.table_schema.row_byte_size()],
+                pos,
             ))
         }
     }

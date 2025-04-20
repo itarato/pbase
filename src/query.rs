@@ -46,21 +46,21 @@ impl RowFilter {
 }
 
 pub enum JoinType {
-    // Inner,
-    Left,
+    Inner,
+    // Left,
     // Rigt,
     // Outer,
 }
 
 pub struct JoinContract {
     pub join_type: JoinType,
-    pub rhs_field: String,
-    pub lhs_field: FieldSelector,
+    pub lhs: FieldSelector,
+    pub rhs: FieldSelector,
 }
 
 pub struct SelectQuery {
     pub from: String,
-    pub joins: IndexMap<String, JoinContract>,
+    pub joins: Vec<JoinContract>,
     // List of AND-ed filters.
     pub filters: Vec<RowFilter>,
 }

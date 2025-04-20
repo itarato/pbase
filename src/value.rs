@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 pub enum Value {
     NULL,
     I32(i32),
+    U8(u8),
 }
 
 impl Value {
@@ -11,6 +12,7 @@ impl Value {
         match self {
             Value::NULL => {} // Noop.
             Value::I32(v) => buf[0..4].copy_from_slice(&v.to_le_bytes()),
+            Value::U8(v) => buf[0] = *v,
         };
     }
 }
@@ -23,8 +25,13 @@ impl Ord for Value {
             (Value::NULL, Value::I32(_)) => Ordering::Less,
             (Value::I32(_), Value::NULL) => Ordering::Greater,
 
+            (Value::NULL, Value::U8(_)) => Ordering::Less,
+            (Value::U8(_), Value::NULL) => Ordering::Greater,
+
             (Value::I32(lhs), Value::I32(rhs)) => lhs.cmp(rhs),
-            // _ => panic!("Values cannot be compared {:?} ? {:?}", self, other),
+            (Value::U8(lhs), Value::U8(rhs)) => lhs.cmp(rhs),
+
+            _ => panic!("Values cannot be compared {:?} ? {:?}", self, other),
         }
     }
 }
