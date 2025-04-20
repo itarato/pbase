@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Index};
 
 use crate::value::Value;
 
@@ -141,6 +141,89 @@ impl TableSchema {
     }
 }
 
+pub struct TableReader<'a> {
+    table_schema: &'a TableSchema,
+    row_bytes: &'a [u8],
+}
+
+impl<'a> TableReader<'a> {
+    fn new(table_schema: &'a TableSchema, row_bytes: &'a [u8]) -> TableReader<'a> {
+        TableReader {
+            table_schema,
+            row_bytes,
+        }
+    }
+
+    pub fn get_field_value(&self, field: &str) -> Value {
+        let field_pos = self.table_schema.field_byte_pos(field);
+        self.table_schema.fields[field].value_from_bytes(&self.row_bytes[field_pos..])
+    }
+}
+
+pub struct TableRowIterator<'a> {
+    table_schema: &'a TableSchema,
+    table_bytes: &'a [u8],
+    current_pos: usize,
+}
+
+impl<'a> TableRowIterator<'a> {
+    pub fn new(table_schema: &'a TableSchema, table_bytes: &'a [u8]) -> TableRowIterator<'a> {
+        TableRowIterator {
+            table_schema,
+            table_bytes,
+            current_pos: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for TableRowIterator<'a> {
+    type Item = TableReader<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_pos >= self.table_bytes.len() {
+            None
+        } else {
+            let pos = self.current_pos;
+            self.current_pos += self.table_schema.row_byte_size();
+
+            Some(TableReader::new(
+                &self.table_schema,
+                &self.table_bytes[pos..pos + self.table_schema.row_byte_size()],
+            ))
+        }
+    }
+}
+
+pub struct TableRowPositionIterator {
+    row_size: usize,
+    table_size: usize,
+    current_pos: usize,
+}
+
+impl TableRowPositionIterator {
+    pub fn new(row_size: usize, table_size: usize) -> TableRowPositionIterator {
+        TableRowPositionIterator {
+            row_size,
+            table_size,
+            current_pos: 0,
+        }
+    }
+}
+
+impl Iterator for TableRowPositionIterator {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_pos >= self.table_size {
+            None
+        } else {
+            let pos = self.current_pos;
+            self.current_pos += self.row_size;
+            Some(pos)
+        }
+    }
+}
+
 pub struct DatabaseSchema {
     pub tables: HashMap<String, TableSchema>,
 }
@@ -153,7 +236,7 @@ mod test {
 
     use crate::{schema::FieldSchema, value::Value};
 
-    use super::TableSchema;
+    use super::{TableRowIterator, TableSchema};
 
     #[test]
     fn test_empty_table_schema() {
@@ -271,5 +354,35 @@ mod test {
         assert_eq!(Value::I32(0x04030201), values["f1"]);
         assert_eq!(Value::I32(0x05050505), values["f2"]);
         assert_eq!(Value::I32(0x09080706), values["f3"]);
+    }
+
+    #[test]
+    fn test_table_row_iterator() {
+        let table_schema = TableSchema {
+            name: "t1".to_string(),
+            fields: IndexMap::from([
+                ("f1".to_string(), FieldSchema::I32),
+                ("f2".to_string(), FieldSchema::I32),
+            ]),
+            indices: HashMap::new(),
+        };
+
+        #[rustfmt::skip]
+        let table_bytes: [u8; 16] = [
+            1, 0, 0, 0,   2, 0, 0, 0, // Row 1
+            3, 0, 0, 0,   4, 0, 0, 0, // Row 2
+        ];
+
+        let mut it = TableRowIterator::new(&table_schema, &table_bytes);
+
+        let row1 = it.next().unwrap();
+        assert_eq!(Value::I32(1), row1.get_field_value("f1"));
+        assert_eq!(Value::I32(2), row1.get_field_value("f2"));
+
+        let row2 = it.next().unwrap();
+        assert_eq!(Value::I32(3), row2.get_field_value("f1"));
+        assert_eq!(Value::I32(4), row2.get_field_value("f2"));
+
+        assert!(it.next().is_none());
     }
 }

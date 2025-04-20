@@ -110,6 +110,69 @@ where
     }
 }
 
+// TODO: we could lighten this up by using usize-generic on the table count (insead of a vec).
+pub struct MultiTableView {
+    // Rows is a lazy pointer list to original lines:
+    // A line (outer vec) represents a list of table-row-sets.
+    // An elem of the inner list is a pointer to the Nth table row location.
+    pub rows: Vec<Vec<usize>>,
+    pub pointed_tables: Vec<String>,
+}
+
+#[derive(Debug)]
+pub enum Selection {
+    All,
+    List(Vec<usize>), // Line byte positions (not line indices).
+}
+
+pub struct SelectionIterator<'a> {
+    selection: &'a Selection,
+    row_byte_len: usize,
+    table_byte_len: usize,
+    current_idx: usize,
+}
+
+impl<'a> SelectionIterator<'a> {
+    pub fn new(
+        selection: &'a Selection,
+        row_byte_len: usize,
+        table_byte_len: usize,
+    ) -> SelectionIterator<'a> {
+        SelectionIterator {
+            selection,
+            row_byte_len,
+            table_byte_len,
+            current_idx: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for SelectionIterator<'a> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.selection {
+            Selection::All => {
+                if self.current_idx >= self.table_byte_len {
+                    None
+                } else {
+                    let previous_idx = self.current_idx;
+                    self.current_idx += self.row_byte_len;
+                    Some(previous_idx)
+                }
+            }
+            Selection::List(positions) => {
+                if self.current_idx >= positions.len() {
+                    None
+                } else {
+                    self.current_idx += 1;
+                    Some(positions[self.current_idx - 1])
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

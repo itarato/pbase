@@ -4,68 +4,15 @@ use std::{
 };
 
 use log::debug;
+use memmap::Mmap;
 
 use crate::{
     common::*,
-    query::{RowFilter, SelectQuery},
+    query::{FilterSource, RowFilter, SelectQuery},
     schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
     value::Value,
 };
-
-#[derive(Debug)]
-enum Selection {
-    All,
-    List(Vec<usize>), // Line byte positions (not line indices).
-}
-
-struct SelectionIterator<'a> {
-    selection: &'a Selection,
-    row_byte_len: usize,
-    table_byte_len: usize,
-    current_idx: usize,
-}
-
-impl<'a> SelectionIterator<'a> {
-    fn new(
-        selection: &'a Selection,
-        row_byte_len: usize,
-        table_byte_len: usize,
-    ) -> SelectionIterator<'a> {
-        SelectionIterator {
-            selection,
-            row_byte_len,
-            table_byte_len,
-            current_idx: 0,
-        }
-    }
-}
-
-impl<'a> Iterator for SelectionIterator<'a> {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.selection {
-            Selection::All => {
-                if self.current_idx >= self.table_byte_len {
-                    None
-                } else {
-                    let previous_idx = self.current_idx;
-                    self.current_idx += self.row_byte_len;
-                    Some(previous_idx)
-                }
-            }
-            Selection::List(positions) => {
-                if self.current_idx >= positions.len() {
-                    None
-                } else {
-                    self.current_idx += 1;
-                    Some(positions[self.current_idx - 1])
-                }
-            }
-        }
-    }
-}
 
 pub struct SelectQueryExecutor<'a> {
     table_opener: &'a TableOpener,
@@ -81,13 +28,67 @@ impl<'a> SelectQueryExecutor<'a> {
     }
 
     pub fn call(&self) -> Result<Vec<HashMap<String, Value>>, Error> {
-        let mut table_schemas = HashMap::new();
-        let table_schema: TableSchema = self.table_opener.open_schema(&self.query.from)?;
-        table_schemas.insert(self.query.from.clone(), &table_schema);
+        let table_schemas = self.collect_table_schemas_from_query()?;
+        let filter_groups = self.group_filters_by_table();
 
-        let table_file_mmap = self.table_opener.table_mmap(&self.query.from)?;
-        let table_bytes = &table_file_mmap[..];
+        // Preloading memory mapped table files for main table and all join tables.
+        let mut table_bytes_map: HashMap<&str, Mmap> = HashMap::new();
+        table_bytes_map.insert(
+            self.query.from.as_str(),
+            self.table_opener.table_mmap(&self.query.from)?,
+        );
+        for (join_table, _) in &self.query.joins {
+            table_bytes_map.insert(
+                join_table.as_str(),
+                self.table_opener.table_mmap(&join_table)?,
+            );
+        }
 
+        // Reducing table search spaces using single table filters.
+        let mut selections: HashMap<&str, Selection> = HashMap::new();
+        selections.insert(
+            self.query.from.as_str(),
+            self.execute_filters_on_single_tables(
+                &table_bytes_map[self.query.from.as_str()][..],
+                &table_schemas[&self.query.from],
+            )?,
+        );
+        for (join_table, _) in &self.query.joins {
+            selections.insert(
+                self.query.from.as_str(),
+                self.execute_filters_on_single_tables(
+                    &table_bytes_map[join_table.as_str()][..],
+                    &table_schemas[join_table],
+                )?,
+            );
+        }
+
+        // Compile joined view. (Assuming we will need all to present/filter.)
+        let multi_table_view = self.generate_multi_table_view(&selections, &table_bytes_map);
+
+        // TODO: execute multi-table filters.
+
+        // Materialize the selection and return.
+        unimplemented!()
+        // Ok(self.materialize(selection, &table_bytes, table_schemas))
+    }
+
+    fn generate_multi_table_view(
+        &self,
+        selections: &HashMap<&str, Selection>,
+        table_bytes_map: &HashMap<&str, Mmap>,
+    ) -> Result<MultiTableView, Error> {
+        unimplemented!()
+    }
+
+    //
+    // Applies all single table filters on a table and returns the selection.
+    //
+    fn execute_filters_on_single_tables(
+        &self,
+        table_bytes: &[u8],
+        table_schema: &TableSchema,
+    ) -> Result<Selection, Error> {
         let mut selection = Selection::All;
 
         // TODO: Greedy algorithm for index selection might not be the best.
@@ -101,27 +102,36 @@ impl<'a> SelectQueryExecutor<'a> {
         // NOTE: We're only doing a single index filter (if there is one change at least).
         // There might be a better performance to evaluate more than one and using a crossecton of the pos-list results. Later.
 
-        let mut filters_left = self.query.filters.clone();
-
-        // Establish current subset
-        let filter_fields: HashSet<&String> = filters_left
+        let mut filters_left: Vec<&RowFilter> = self
+            .query
+            .filters
             .iter()
-            .filter_map(|row_filter| {
-                if row_filter.field.source != self.query.from {
-                    unimplemented!("Row filter and select table does not match.");
+            .filter(|row_filter| {
+                match row_filter.filter_source() {
+                    // Ignore other table and multi table filters.
+                    FilterSource::Single(table_name) => {
+                        if table_name == table_schema.name {
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    FilterSource::Multi(_, _) => false,
                 }
-
-                Some(&row_filter.field.name)
             })
             .collect();
 
-        if let Some(index_name) = index_for_query(&table_schemas[&self.query.from], &filter_fields)
-        {
+        // Establish current subset.
+        let filter_fields: HashSet<&String> = filters_left
+            .iter()
+            .map(|row_filter| &row_filter.field.name)
+            .collect();
+
+        if let Some(index_name) = index_for_query(&table_schema, &filter_fields) {
             debug!("Using index: {}", &index_name);
 
             // Index lookup.
-            selection =
-                self.index_filter(&index_name, &filters_left, &table_schemas[&self.query.from])?;
+            selection = self.index_filter(&index_name, &filters_left, &table_schema)?;
             debug!("Index filter result selection: {:?}", &selection);
 
             let index_fields = &table_schema.indices[&index_name];
@@ -141,17 +151,51 @@ impl<'a> SelectQueryExecutor<'a> {
 
         // Linear scan the rest.
         if !filters_left.is_empty() {
-            selection = self.scan_filter(selection, &filters_left, &table_bytes, &table_schemas);
+            selection = self.scan_filter(selection, &filters_left, &table_bytes, &table_schema);
         }
 
-        // Materialize the selection and return.
-        Ok(self.materialize(selection, &table_bytes, table_schemas))
+        Ok(selection)
+    }
+
+    fn collect_table_schemas_from_query(&self) -> Result<HashMap<String, TableSchema>, Error> {
+        let mut table_schemas = HashMap::new();
+
+        // Main table schema.
+        table_schemas.insert(
+            self.query.from.clone(),
+            self.table_opener.open_schema(&self.query.from)?,
+        );
+
+        // Join table schemas.
+        for (join_table, _) in &self.query.joins {
+            table_schemas.insert(
+                join_table.clone(),
+                self.table_opener.open_schema(&join_table)?,
+            );
+        }
+
+        Ok(table_schemas)
+    }
+
+    fn group_filters_by_table(&self) -> HashMap<FilterSource, Vec<&RowFilter>> {
+        let mut filter_groups: HashMap<FilterSource, Vec<&RowFilter>> = HashMap::new();
+
+        // Collect where filters.
+        for row_filter in &self.query.filters {
+            let filter_source = row_filter.filter_source();
+            filter_groups
+                .entry(filter_source)
+                .or_default()
+                .push(row_filter);
+        }
+
+        filter_groups
     }
 
     fn index_filter(
         &self,
         index_name: &str,
-        filters_left: &Vec<RowFilter>,
+        filters_left: &Vec<&RowFilter>,
         table_schema: &TableSchema,
     ) -> Result<Selection, Error> {
         let index_row_byte_len = table_schema.index_row_byte_size(index_name);
@@ -248,15 +292,18 @@ impl<'a> SelectQueryExecutor<'a> {
         Ok(Selection::List(out_positions))
     }
 
+    //
+    // Filters a selection on a table using row-fitlers line by line (no index use).
+    //
     fn scan_filter(
         &self,
         current_selection: Selection,
-        filters_left: &Vec<RowFilter>,
+        filters: &Vec<&RowFilter>,
         table_bytes: &[u8],
-        table_schemas: &HashMap<String, &TableSchema>,
+        table_schema: &TableSchema,
     ) -> Selection {
         let table_byte_len = table_bytes.len();
-        let row_byte_len = table_schemas[&self.query.from].row_byte_size();
+        let row_byte_len = table_schema.row_byte_size();
         if table_byte_len % row_byte_len != 0 {
             panic!(
                 "Invalid table size. Table byte size ({}) is not multiple of row byte size ({}).",
@@ -264,7 +311,7 @@ impl<'a> SelectQueryExecutor<'a> {
             );
         }
 
-        assert!(filters_left.len() > 0);
+        assert!(filters.len() > 0);
 
         let selection_it = SelectionIterator::new(&current_selection, row_byte_len, table_byte_len);
         let mut filtered_positions = vec![];
@@ -272,11 +319,17 @@ impl<'a> SelectQueryExecutor<'a> {
             let row_bytes = &table_bytes[pos..pos + row_byte_len];
 
             // We need to go through all filters.
-            for filter in filters_left {
+            for filter in filters {
+                if filter.field.source != table_schema.name {
+                    panic!(
+                        "Wrong filter. Table: {} Filter source: {}",
+                        table_schema.name, filter.field.source
+                    );
+                }
+
                 // Skip if not match.
-                let filter_field_pos =
-                    table_schemas[&filter.field.source].field_byte_pos(&filter.field.name);
-                let field_schema = &table_schemas[&filter.field.source].fields[&filter.field.name];
+                let filter_field_pos = table_schema.field_byte_pos(&filter.field.name);
+                let field_schema = &table_schema.fields[&filter.field.name];
                 let value = field_schema.value_from_bytes(&row_bytes[filter_field_pos..]);
                 let is_satisfy = value.cmp(&filter.rhs) == filter.op;
 
@@ -399,10 +452,11 @@ pub fn find_insert_pos_in_index(
 #[cfg(test)]
 mod test {
     use std::collections::{HashMap, HashSet};
+    use std::hash::{DefaultHasher, Hash, Hasher};
 
     use indexmap::IndexMap;
 
-    use crate::query_tools::{find_insert_pos_in_index, index_score};
+    use crate::query_tools::{find_insert_pos_in_index, index_score, FilterSource};
     use crate::schema::{FieldSchema, TableSchema};
     use crate::value::Value;
 
@@ -557,6 +611,28 @@ mod test {
             5,
             &table_schema
         );
+    }
+
+    #[test]
+    fn test_single_filter_source_hash_works() {
+        let mut hasher1 = DefaultHasher::new();
+        FilterSource::new_single("abc".into()).hash(&mut hasher1);
+
+        let mut hasher2 = DefaultHasher::new();
+        FilterSource::new_single("abc".into()).hash(&mut hasher2);
+
+        assert_eq!(hasher1.finish(), hasher2.finish());
+    }
+
+    #[test]
+    fn test_multi_filter_source_hash_works() {
+        let mut hasher1 = DefaultHasher::new();
+        FilterSource::new_multi("abc".into(), "def".into()).hash(&mut hasher1);
+
+        let mut hasher2 = DefaultHasher::new();
+        FilterSource::new_multi("def".into(), "abc".into()).hash(&mut hasher2);
+
+        assert_eq!(hasher1.finish(), hasher2.finish());
     }
 
     fn assert_find_insert_pos_in_index<const INDEX_LEN: usize>(

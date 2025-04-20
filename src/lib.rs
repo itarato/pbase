@@ -1,4 +1,5 @@
 pub mod common;
+pub mod multi_table_view;
 pub mod pbase;
 pub mod query;
 pub mod query_tools;

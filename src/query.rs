@@ -10,25 +10,59 @@ pub struct FieldSelector {
     pub source: String,
 }
 
+#[derive(Hash, PartialEq, Eq)]
+pub enum FilterSource {
+    Single(String),
+    Multi(String, String),
+}
+
+impl FilterSource {
+    pub fn new_single(table: String) -> FilterSource {
+        FilterSource::Single(table)
+    }
+
+    pub fn new_multi(table_lhs: String, table_rhs: String) -> FilterSource {
+        assert!(table_lhs != table_rhs);
+        if table_lhs <= table_rhs {
+            FilterSource::Multi(table_lhs, table_rhs)
+        } else {
+            FilterSource::Multi(table_rhs, table_lhs)
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RowFilter {
     pub field: FieldSelector,
     pub op: Ordering,
+    // TODO: when `rhs` can be a join-ed field, `self.filter_source` needs to support mutli-source.
     pub rhs: Value,
 }
 
+impl RowFilter {
+    pub fn filter_source(&self) -> FilterSource {
+        FilterSource::Single(self.field.source.clone())
+    }
+}
+
+pub enum JoinType {
+    // Inner,
+    Left,
+    // Rigt,
+    // Outer,
+}
+
 pub struct JoinContract {
-    joined_table_field: String,
-    reference: FieldSelector,
+    pub join_type: JoinType,
+    pub rhs_field: String,
+    pub lhs_field: FieldSelector,
 }
 
 pub struct SelectQuery {
-    // pub result: Vec<FieldSelector>,
     pub from: String,
     pub joins: IndexMap<String, JoinContract>,
     // List of AND-ed filters.
     pub filters: Vec<RowFilter>,
-    // pub limit: Option<usize>,
 }
 
 pub struct InsertQuery {
