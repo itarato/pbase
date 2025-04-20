@@ -193,7 +193,7 @@ mod test {
             fields: IndexMap::from([("t1_id".to_string(), FieldSchema::U8)]),
             indices: HashMap::new(),
         };
-        let t2_bytes: [u8; 4] = [1, 2, 7, 8];
+        let t2_bytes: [u8; 5] = [1, 2, 3, 7, 8];
 
         let mut view = MultiTableView::new_from_table_bytes_and_selection(
             &t1_bytes,
@@ -208,10 +208,11 @@ mod test {
         ]);
         let table_schema_map =
             HashMap::from([("t1".to_string(), t1_schema), ("t2".to_string(), t2_schema)]);
+        let join_selection = crate::common::Selection::List(vec![0, 1, /* no 2 */ 3, 4]);
 
         view.join(
             JoinType::Inner,
-            &crate::common::Selection::All,
+            &join_selection,
             "t1",
             "t2",
             "id",
