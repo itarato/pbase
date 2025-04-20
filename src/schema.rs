@@ -2,7 +2,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::value::Value;
+use crate::{common::Selection, value::Value};
 
 pub type TablePtrType = u64;
 pub const TABLE_PTR_BYTE_SIZE: usize = std::mem::size_of::<TablePtrType>();
@@ -172,23 +172,25 @@ impl<'a> TableReader<'a> {
 pub struct TableRowIterator<'a> {
     table_schema: &'a TableSchema,
     table_bytes: &'a [u8],
+    selection: &'a Selection,
     current_pos: usize,
 }
 
 impl<'a> TableRowIterator<'a> {
-    pub fn new(table_schema: &'a TableSchema, table_bytes: &'a [u8]) -> TableRowIterator<'a> {
+    pub fn new(
+        table_schema: &'a TableSchema,
+        table_bytes: &'a [u8],
+        selection: &'a Selection,
+    ) -> TableRowIterator<'a> {
         TableRowIterator {
             table_schema,
             table_bytes,
+            selection,
             current_pos: 0,
         }
     }
-}
 
-impl<'a> Iterator for TableRowIterator<'a> {
-    type Item = TableReader<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next_with_all_selection(&mut self) -> Option<TableReader<'a>> {
         if self.current_pos >= self.table_bytes.len() {
             None
         } else {
@@ -200,6 +202,32 @@ impl<'a> Iterator for TableRowIterator<'a> {
                 &self.table_bytes[pos..pos + self.table_schema.row_byte_size()],
                 pos,
             ))
+        }
+    }
+
+    fn next_with_positions(&mut self, positions: &Vec<usize>) -> Option<TableReader<'a>> {
+        if self.current_pos >= positions.len() {
+            None
+        } else {
+            let current_pos = positions[self.current_pos];
+            self.current_pos += 1;
+
+            Some(TableReader::new(
+                &self.table_schema,
+                &self.table_bytes[current_pos..current_pos + self.table_schema.row_byte_size()],
+                current_pos,
+            ))
+        }
+    }
+}
+
+impl<'a> Iterator for TableRowIterator<'a> {
+    type Item = TableReader<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.selection {
+            Selection::All => self.next_with_all_selection(),
+            Selection::List(positions) => self.next_with_positions(positions),
         }
     }
 }
@@ -367,7 +395,7 @@ mod test {
     }
 
     #[test]
-    fn test_table_row_iterator() {
+    fn test_table_row_iterator_with_all_selection() {
         let table_schema = TableSchema {
             name: "t1".to_string(),
             fields: IndexMap::from([
@@ -383,7 +411,8 @@ mod test {
             3, 0, 0, 0,   4, 0, 0, 0, // Row 2
         ];
 
-        let mut it = TableRowIterator::new(&table_schema, &table_bytes);
+        let mut it =
+            TableRowIterator::new(&table_schema, &table_bytes, &crate::common::Selection::All);
 
         let row1 = it.next().unwrap();
         assert_eq!(Value::I32(1), row1.get_field_value("f1"));
@@ -392,6 +421,40 @@ mod test {
         let row2 = it.next().unwrap();
         assert_eq!(Value::I32(3), row2.get_field_value("f1"));
         assert_eq!(Value::I32(4), row2.get_field_value("f2"));
+
+        assert!(it.next().is_none());
+    }
+
+    #[test]
+    fn test_table_row_iterator_with_list_selection() {
+        let table_schema = TableSchema {
+            name: "t1".to_string(),
+            fields: IndexMap::from([
+                ("f1".to_string(), FieldSchema::I32),
+                ("f2".to_string(), FieldSchema::I32),
+            ]),
+            indices: HashMap::new(),
+        };
+
+        #[rustfmt::skip]
+        let table_bytes: [u8; 24] = [
+            1, 0, 0, 0,   2, 0, 0, 0, // Row 1
+            3, 0, 0, 0,   4, 0, 0, 0, // Row 2
+            5, 0, 0, 0,   6, 0, 0, 0, // Row 3
+        ];
+
+        let selection = crate::common::Selection::List(vec![8, 16]);
+        let mut it = TableRowIterator::new(&table_schema, &table_bytes, &selection);
+
+        let row1 = it.next().unwrap();
+        assert_eq!(Value::I32(3), row1.get_field_value("f1"));
+        assert_eq!(Value::I32(4), row1.get_field_value("f2"));
+        assert_eq!(8, row1.absolute_pos);
+
+        let row2 = it.next().unwrap();
+        assert_eq!(Value::I32(5), row2.get_field_value("f1"));
+        assert_eq!(Value::I32(6), row2.get_field_value("f2"));
+        assert_eq!(16, row2.absolute_pos);
 
         assert!(it.next().is_none());
     }

@@ -42,6 +42,7 @@ impl MultiTableView {
     pub fn join(
         &mut self,
         join_type: JoinType,
+        selection: &Selection,
         lhs_table_name: &str,
         rhs_table_name: &str,
         lhs_match_field_name: &str,
@@ -51,6 +52,7 @@ impl MultiTableView {
     ) {
         match join_type {
             JoinType::Inner => self.inner_join(
+                selection,
                 lhs_table_name,
                 rhs_table_name,
                 lhs_match_field_name,
@@ -63,6 +65,7 @@ impl MultiTableView {
 
     fn inner_join(
         &mut self,
+        selection: &Selection,
         lhs_table_name: &str,
         rhs_table_name: &str,
         lhs_match_field_name: &str,
@@ -95,6 +98,7 @@ impl MultiTableView {
             let rhs_table_it = TableRowIterator::new(
                 &table_schema_map[rhs_table_name],
                 table_bytes_map[rhs_table_name],
+                &selection,
             );
             for rhs_row_reader in rhs_table_it {
                 let rhs_value = rhs_row_reader.get_field_value(rhs_match_field_name);
@@ -207,6 +211,7 @@ mod test {
 
         view.join(
             JoinType::Inner,
+            &crate::common::Selection::All,
             "t1",
             "t2",
             "id",
