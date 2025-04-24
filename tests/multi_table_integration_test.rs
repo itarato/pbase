@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use indexmap::IndexMap;
 use pbase::{
     pbase::PBase,
-    query::{CreateTableQuery, FieldSelector, InsertQuery, JoinContract, RowFilter, SelectQuery},
+    query::{CreateTableQuery, FieldSelector, InsertQuery, JoinContract, SelectQuery},
     schema::{FieldSchema, TableSchema},
     value::Value,
 };
