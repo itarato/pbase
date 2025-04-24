@@ -116,8 +116,8 @@ impl MultiTableView {
         std::mem::swap(&mut old_view, &mut self.view);
         let old_view = old_view; // Make it immutable.
 
-        for view_row_idx in 0..old_view.len() {
-            let lhs_row_pos = old_view[view_row_idx][lhs_table_idx];
+        for old_view_row in &old_view {
+            let lhs_row_pos = old_view_row[lhs_table_idx];
             let lhs_row_bytes = &table_bytes_map[lhs_table_name][lhs_row_pos..];
             let lhs_row_reader = TableReader::new(
                 &table_schema_map[lhs_table_name],
@@ -129,13 +129,13 @@ impl MultiTableView {
             let rhs_table_it = TableRowIterator::new(
                 &table_schema_map[rhs_table_name],
                 table_bytes_map[rhs_table_name],
-                &selection,
+                selection,
             );
             for rhs_row_reader in rhs_table_it {
                 let rhs_value = rhs_row_reader.get_field_value(rhs_match_field_name);
 
                 if lhs_value == rhs_value {
-                    let mut new_row = old_view[view_row_idx].clone();
+                    let mut new_row = old_view_row.clone();
                     new_row.push(rhs_row_reader.absolute_pos);
                     self.view.push(new_row);
                 }
@@ -143,7 +143,8 @@ impl MultiTableView {
         }
     }
 
-    pub fn iter<'a>(
+    #[must_use]
+    pub const fn iter<'a>(
         &'a self,
         table_bytes_map: &'a HashMap<&'a str, &'a [u8]>,
         table_schema_map: &'a HashMap<&'a str, TableSchema>,
@@ -174,8 +175,8 @@ impl<'a> Iterator for MultiTableViewIterator<'a> {
             let current_idx = self.current_idx;
             self.current_idx += 1;
             Some(MultiTableViewRowReader {
-                table_bytes_map: &self.table_bytes_map,
-                table_schema_map: &self.table_schema_map,
+                table_bytes_map: self.table_bytes_map,
+                table_schema_map: self.table_schema_map,
                 view_row: &self.view.view[current_idx],
                 tables: &self.view.tables,
             })
