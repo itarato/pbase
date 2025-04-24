@@ -110,15 +110,6 @@ where
     }
 }
 
-// TODO: we could lighten this up by using usize-generic on the table count (insead of a vec).
-pub struct MultiTableView {
-    // Rows is a lazy pointer list to original lines:
-    // A line (outer vec) represents a list of table-row-sets.
-    // An elem of the inner list is a pointer to the Nth table row location.
-    pub rows: Vec<Vec<usize>>,
-    pub pointed_tables: Vec<String>,
-}
-
 #[derive(Debug)]
 pub enum Selection {
     All,

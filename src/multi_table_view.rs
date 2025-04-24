@@ -6,6 +6,26 @@ use crate::{
     schema::{TableReader, TableRowIterator, TableRowPositionIterator, TableSchema},
 };
 
+pub struct MultiTableViewRowReader<'a> {
+    table_bytes_map: &'a HashMap<&'a str, &'a [u8]>,
+    table_schema_map: &'a HashMap<&'a str, TableSchema>,
+    view_row: &'a Vec<usize>,
+    tables: &'a HashMap<String, usize>,
+}
+
+impl<'a> MultiTableViewRowReader<'a> {
+    pub fn table_reader(&'a self, table_name: &str) -> TableReader<'a> {
+        let table_pos_idx = self.tables[table_name];
+        let table_row_pos = self.view_row[table_pos_idx];
+
+        let row_bytes_size = self.table_schema_map[table_name].row_byte_size();
+        let row_bytes =
+            &self.table_bytes_map[table_name][table_row_pos..table_row_pos + row_bytes_size];
+
+        TableReader::new(&self.table_schema_map[table_name], row_bytes, table_row_pos)
+    }
+}
+
 pub struct MultiTableView {
     pub view: Vec<Vec<usize>>,
     pub tables: HashMap<String, usize>,
@@ -41,14 +61,14 @@ impl MultiTableView {
 
     pub fn join(
         &mut self,
-        join_type: JoinType,
+        join_type: &JoinType,
         selection: &Selection,
         lhs_table_name: &str,
         rhs_table_name: &str,
         lhs_match_field_name: &str,
         rhs_match_field_name: &str,
-        table_bytes_map: &HashMap<String, &[u8]>,
-        table_schema_map: &HashMap<String, TableSchema>,
+        table_bytes_map: &HashMap<&str, &[u8]>,
+        table_schema_map: &HashMap<&str, TableSchema>,
     ) {
         match join_type {
             JoinType::Inner => self.inner_join(
@@ -70,8 +90,8 @@ impl MultiTableView {
         rhs_table_name: &str,
         lhs_match_field_name: &str,
         rhs_match_field_name: &str,
-        table_bytes_map: &HashMap<String, &[u8]>,
-        table_schema_map: &HashMap<String, TableSchema>,
+        table_bytes_map: &HashMap<&str, &[u8]>,
+        table_schema_map: &HashMap<&str, TableSchema>,
     ) {
         // Register new table.
         self.tables
@@ -202,16 +222,12 @@ mod test {
         );
         assert_eq!(4, view.len());
 
-        let table_bytes_map = HashMap::from([
-            ("t1".to_string(), &t1_bytes[..]),
-            ("t2".to_string(), &t2_bytes[..]),
-        ]);
-        let table_schema_map =
-            HashMap::from([("t1".to_string(), t1_schema), ("t2".to_string(), t2_schema)]);
+        let table_bytes_map = HashMap::from([("t1", &t1_bytes[..]), ("t2", &t2_bytes[..])]);
+        let table_schema_map = HashMap::from([("t1", t1_schema), ("t2", t2_schema)]);
         let join_selection = crate::common::Selection::List(vec![0, 1, /* no 2 */ 3, 4]);
 
         view.join(
-            JoinType::Inner,
+            &JoinType::Inner,
             &join_selection,
             "t1",
             "t2",

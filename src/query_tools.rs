@@ -8,6 +8,7 @@ use memmap::Mmap;
 
 use crate::{
     common::*,
+    multi_table_view::MultiTableView,
     query::{FilterSource, RowFilter, SelectQuery},
     schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
@@ -32,17 +33,11 @@ impl<'a> SelectQueryExecutor<'a> {
         let filter_groups = self.group_filters_by_table();
 
         // Preloading memory mapped table files for main table and all join tables.
-        let mut table_bytes_map: HashMap<&str, Mmap> = HashMap::new();
-        table_bytes_map.insert(
-            self.query.from.as_str(),
-            self.table_opener.table_mmap(&self.query.from)?,
-        );
-        for join_contract in &self.query.joins {
-            table_bytes_map.insert(
-                &join_contract.rhs.source,
-                self.table_opener.table_mmap(&join_contract.rhs.source)?,
-            );
-        }
+        let table_bytes_mmap_map: HashMap<&str, Mmap> = self.collect_table_bytes_map()?;
+        let table_bytes_map: HashMap<&str, &[u8]> = table_bytes_mmap_map
+            .iter()
+            .map(|(k, v)| (k.clone(), &v[..]))
+            .collect();
 
         // Reducing table search spaces using single table filters.
         let mut selections: HashMap<&str, Selection> = HashMap::new();
@@ -50,7 +45,7 @@ impl<'a> SelectQueryExecutor<'a> {
             self.query.from.as_str(),
             self.execute_filters_on_single_tables(
                 &table_bytes_map[self.query.from.as_str()][..],
-                &table_schemas[&self.query.from],
+                &table_schemas[self.query.from.as_str()],
             )?,
         );
         for join_contract in &self.query.joins {
@@ -58,27 +53,47 @@ impl<'a> SelectQueryExecutor<'a> {
                 self.query.from.as_str(),
                 self.execute_filters_on_single_tables(
                     &table_bytes_map[join_contract.rhs.source.as_str()][..],
-                    &table_schemas[&join_contract.rhs.source],
+                    &table_schemas[join_contract.rhs.source.as_str()],
                 )?,
             );
         }
 
         // Compile joined view. (Assuming we will need all to present/filter.)
-        let multi_table_view = self.generate_multi_table_view(&selections, &table_bytes_map);
+        let multi_table_view =
+            self.generate_multi_table_view(&selections, &table_bytes_map, &table_schemas);
 
         // TODO: execute multi-table filters.
 
         // Materialize the selection and return.
-        unimplemented!()
-        // Ok(self.materialize(selection, &table_bytes, table_schemas))
+        Ok(self.materialize_view(multi_table_view, &table_bytes_map, &table_schemas))
     }
 
     fn generate_multi_table_view(
         &self,
         selections: &HashMap<&str, Selection>,
-        table_bytes_map: &HashMap<&str, Mmap>,
-    ) -> Result<MultiTableView, Error> {
-        unimplemented!()
+        table_bytes_map: &HashMap<&str, &[u8]>,
+        table_schema_map: &HashMap<&str, TableSchema>,
+    ) -> MultiTableView {
+        let mut view = MultiTableView::new_from_table_bytes_and_selection(
+            &table_bytes_map[self.query.from.as_str()][..],
+            &table_schema_map[self.query.from.as_str()],
+            &selections[self.query.from.as_str()],
+        );
+
+        for join_contract in &self.query.joins {
+            view.join(
+                &join_contract.join_type,
+                &selections[join_contract.rhs.source.as_str()],
+                &join_contract.lhs.source,
+                &join_contract.rhs.source,
+                &join_contract.lhs.name,
+                &join_contract.rhs.name,
+                &table_bytes_map,
+                &table_schema_map,
+            );
+        }
+
+        view
     }
 
     //
@@ -157,24 +172,40 @@ impl<'a> SelectQueryExecutor<'a> {
         Ok(selection)
     }
 
-    fn collect_table_schemas_from_query(&self) -> Result<HashMap<String, TableSchema>, Error> {
+    fn collect_table_schemas_from_query(&self) -> Result<HashMap<&str, TableSchema>, Error> {
         let mut table_schemas = HashMap::new();
 
         // Main table schema.
         table_schemas.insert(
-            self.query.from.clone(),
+            self.query.from.as_str(),
             self.table_opener.open_schema(&self.query.from)?,
         );
 
         // Join table schemas.
         for join_contract in &self.query.joins {
             table_schemas.insert(
-                join_contract.rhs.source.clone(),
+                join_contract.rhs.source.as_str(),
                 self.table_opener.open_schema(&join_contract.rhs.source)?,
             );
         }
 
         Ok(table_schemas)
+    }
+
+    fn collect_table_bytes_map(&self) -> Result<HashMap<&str, Mmap>, Error> {
+        let mut table_bytes_map: HashMap<&str, Mmap> = HashMap::new();
+        table_bytes_map.insert(
+            self.query.from.as_str(),
+            self.table_opener.table_mmap(&self.query.from)?,
+        );
+        for join_contract in &self.query.joins {
+            table_bytes_map.insert(
+                &join_contract.rhs.source,
+                self.table_opener.table_mmap(&join_contract.rhs.source)?,
+            );
+        }
+
+        Ok(table_bytes_map)
     }
 
     fn group_filters_by_table(&self) -> HashMap<FilterSource, Vec<&RowFilter>> {
@@ -380,6 +411,18 @@ impl<'a> SelectQueryExecutor<'a> {
             }
         }
 
+        out
+    }
+
+    fn materialize_view(
+        &self,
+        view: MultiTableView,
+        table_bytes_map: &HashMap<&str, &[u8]>,
+        table_schema_map: &HashMap<&str, TableSchema>,
+    ) -> Vec<HashMap<String, Value>> {
+        let mut out = vec![];
+
+        unimplemented!();
         out
     }
 }
