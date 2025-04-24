@@ -84,7 +84,10 @@ fn test_basic_single_table_create_and_load() {
     let query_result = db.run_select_query(query);
     assert!(query_result.is_ok());
     assert_eq!(1, query_result.as_ref().unwrap().len());
-    assert_eq!(Value::I32(20), query_result.as_ref().unwrap()[0]["field2"]);
+    assert_eq!(
+        Value::I32(20),
+        query_result.as_ref().unwrap()[0]["testtable.field2"]
+    );
 
     let query = SelectQuery {
         from: "testtable".into(),
@@ -102,7 +105,10 @@ fn test_basic_single_table_create_and_load() {
     let query_result = db.run_select_query(query);
     assert!(query_result.is_ok());
     assert_eq!(1, query_result.as_ref().unwrap().len());
-    assert_eq!(Value::I32(10), query_result.as_ref().unwrap()[0]["field2"]);
+    assert_eq!(
+        Value::I32(10),
+        query_result.as_ref().unwrap()[0]["testtable.field2"]
+    );
 
     let query = SelectQuery {
         from: "testtable".into(),
@@ -120,7 +126,10 @@ fn test_basic_single_table_create_and_load() {
     let query_result = db.run_select_query(query);
     assert!(query_result.is_ok());
     assert_eq!(1, query_result.as_ref().unwrap().len());
-    assert_eq!(Value::I32(30), query_result.as_ref().unwrap()[0]["field2"]);
+    assert_eq!(
+        Value::I32(30),
+        query_result.as_ref().unwrap()[0]["testtable.field2"]
+    );
 }
 
 fn delete_all_by_glob(pattern: &str) {

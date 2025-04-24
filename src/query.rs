@@ -1,13 +1,20 @@
 use std::{cmp::Ordering, collections::HashMap};
 
-use indexmap::IndexMap;
-
 use crate::{schema::TableSchema, value::Value};
 
 #[derive(Clone)]
 pub struct FieldSelector {
     pub name: String,
     pub source: String,
+}
+
+impl FieldSelector {
+    pub fn full_name(&self) -> String {
+        let mut out = self.source.clone();
+        out += ".";
+        out += self.name.as_str();
+        out
+    }
 }
 
 #[derive(Hash, PartialEq, Eq)]

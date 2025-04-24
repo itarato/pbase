@@ -9,7 +9,7 @@ use memmap::Mmap;
 use crate::{
     common::*,
     multi_table_view::MultiTableView,
-    query::{FilterSource, RowFilter, SelectQuery},
+    query::{FieldSelector, FilterSource, RowFilter, SelectQuery},
     schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
     value::Value,
@@ -30,13 +30,12 @@ impl<'a> SelectQueryExecutor<'a> {
 
     pub fn call(&self) -> Result<Vec<HashMap<String, Value>>, Error> {
         let table_schemas = self.collect_table_schemas_from_query()?;
-        let filter_groups = self.group_filters_by_table();
 
         // Preloading memory mapped table files for main table and all join tables.
         let table_bytes_mmap_map: HashMap<&str, Mmap> = self.collect_table_bytes_map()?;
         let table_bytes_map: HashMap<&str, &[u8]> = table_bytes_mmap_map
             .iter()
-            .map(|(k, v)| (k.clone(), &v[..]))
+            .map(|(k, v)| (*k, &v[..]))
             .collect();
 
         // Reducing table search spaces using single table filters.
@@ -206,21 +205,6 @@ impl<'a> SelectQueryExecutor<'a> {
         }
 
         Ok(table_bytes_map)
-    }
-
-    fn group_filters_by_table(&self) -> HashMap<FilterSource, Vec<&RowFilter>> {
-        let mut filter_groups: HashMap<FilterSource, Vec<&RowFilter>> = HashMap::new();
-
-        // Collect where filters.
-        for row_filter in &self.query.filters {
-            let filter_source = row_filter.filter_source();
-            filter_groups
-                .entry(filter_source)
-                .or_default()
-                .push(row_filter);
-        }
-
-        filter_groups
     }
 
     fn index_filter(
@@ -422,7 +406,38 @@ impl<'a> SelectQueryExecutor<'a> {
     ) -> Vec<HashMap<String, Value>> {
         let mut out = vec![];
 
-        unimplemented!();
+        // Collecting output fields.
+        let mut output_fields = vec![];
+        for main_table_field in table_schema_map[self.query.from.as_str()].fields.keys() {
+            output_fields.push(FieldSelector {
+                name: main_table_field.clone(),
+                source: self.query.from.clone(),
+            });
+        }
+
+        for join_contract in &self.query.joins {
+            for join_field in table_schema_map[join_contract.rhs.source.as_str()]
+                .fields
+                .keys()
+            {
+                output_fields.push(FieldSelector {
+                    name: join_contract.rhs.source.clone(),
+                    source: join_field.clone(),
+                });
+            }
+        }
+
+        for view_reader in view.iter(&table_bytes_map, &table_schema_map) {
+            let mut out_row = HashMap::new();
+            for output_field in &output_fields {
+                let table_reader = view_reader.table_reader(&output_field.source);
+                let value = table_reader.get_field_value(&output_field.name);
+                out_row.insert(output_field.full_name(), value);
+            }
+
+            out.push(out_row);
+        }
+
         out
     }
 }
