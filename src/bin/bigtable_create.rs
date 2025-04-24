@@ -29,7 +29,7 @@ fn main() -> Result<(), Error> {
             },
         };
 
-        let result = db.run_create_table_query(create_table_query)?;
+        let result = db.run_create_table_query(&create_table_query)?;
         dbg!(result);
     } else {
         println!("Table already exist");

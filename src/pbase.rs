@@ -6,7 +6,12 @@ use std::{
 };
 
 use crate::{
-    common::*, query::*, query_tools::*, schema::*, table_opener::TableOpener, value::Value,
+    common::{Error, PBaseError},
+    query::{CreateTableQuery, InsertQuery, SelectQuery},
+    query_tools::{find_insert_pos_in_index, SelectQueryExecutor},
+    schema::{TablePtrType, TableSchema},
+    table_opener::TableOpener,
+    value::Value,
 };
 
 use anyhow::Context;
@@ -16,18 +21,23 @@ pub struct PBase {
 }
 
 impl PBase {
-    pub fn new(current_dir: PathBuf) -> PBase {
-        PBase {
+    #[must_use]
+    pub fn new(current_dir: PathBuf) -> Self {
+        Self {
             table_opener: TableOpener::new(current_dir),
         }
     }
 
+    #[must_use]
     pub fn is_table_exist(&self, table_name: &str) -> bool {
         self.table_opener
             .table_schema_file_name(table_name)
             .exists()
     }
 
+    /// # Errors
+    ///
+    /// Errors on file operations.
     pub fn run_select_query(
         &self,
         query: SelectQuery,
@@ -35,7 +45,10 @@ impl PBase {
         SelectQueryExecutor::new(&self.table_opener, query).call()
     }
 
-    pub fn run_insert_query(&self, query: InsertQuery) -> Result<usize, Error> {
+    /// # Errors
+    ///
+    /// Errors on file operations.
+    pub fn run_insert_query(&self, query: &InsertQuery) -> Result<usize, Error> {
         let table_schema = self.table_opener.open_schema(&query.table)?;
         let bytes = table_schema.data_row_to_bytes(&query.values);
         let mut table_data_file = self.table_opener.table_file_for_insert(&query.table)?;
@@ -43,16 +56,22 @@ impl PBase {
             .metadata()
             .context("Failed reading table file size")?
             .len();
-        table_data_file.write(&bytes)?;
+        let written_bytes_len = table_data_file.write(&bytes)?;
+        if written_bytes_len != bytes.len() {
+            return Err(PBaseError::BadFileWriteLength.into());
+        }
 
         for (index_name, index_fields) in &table_schema.indices {
-            self.insert_to_index(index_name, index_fields, &query, &table_schema, new_row_pos)?;
+            self.insert_to_index(index_name, index_fields, query, &table_schema, new_row_pos)?;
         }
 
         Ok(1)
     }
 
-    pub fn run_create_table_query(&self, query: CreateTableQuery) -> Result<(), Error> {
+    /// # Errors
+    ///
+    /// Errors on file operations.
+    pub fn run_create_table_query(&self, query: &CreateTableQuery) -> Result<(), Error> {
         let mut schema_file =
             File::create(self.table_opener.table_schema_file_name(&query.schema.name))?;
         serde_json::to_writer(&mut schema_file, &query.schema)?;

@@ -8,6 +8,8 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub enum PBaseError {
     #[error("Table size is invalid")]
     InvalidTableSizeError,
+    #[error("Bad file write length")]
+    BadFileWriteLength,
 }
 
 ///
@@ -162,6 +164,8 @@ impl Iterator for SelectionIterator<'_> {
 }
 
 /// # Panics
+///
+/// Panics when file operation fail.
 pub fn delete_all_files_by_glob(pattern: &str) {
     for entry in glob::glob(pattern).expect("Failed to read files") {
         fs::remove_file(entry.expect("Failed loading path")).expect("Failed deleting file");

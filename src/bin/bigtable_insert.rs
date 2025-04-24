@@ -20,7 +20,7 @@ fn main() {
                 ("field4".into(), Value::I32(rng.random::<i32>() % 5)),
             ]),
         };
-        if let Err(err) = db.run_insert_query(insert_query) {
+        if let Err(err) = db.run_insert_query(&insert_query) {
             eprintln!("Failed insert: {:?}", err);
             break;
         }

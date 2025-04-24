@@ -31,7 +31,7 @@ fn test_basic_single_table_create_and_load() {
         },
     };
 
-    let create_result = db.run_create_table_query(create_table_query);
+    let create_result = db.run_create_table_query(&create_table_query);
     assert!(create_result.is_ok());
 
     // Insert.
@@ -43,7 +43,7 @@ fn test_basic_single_table_create_and_load() {
             ("field3".into(), Value::I32(100)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -54,7 +54,7 @@ fn test_basic_single_table_create_and_load() {
             ("field3".into(), Value::I32(200)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -65,7 +65,7 @@ fn test_basic_single_table_create_and_load() {
             ("field3".into(), Value::I32(300)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     // Query.

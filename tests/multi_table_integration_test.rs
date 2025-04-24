@@ -33,7 +33,7 @@ fn test_one_join_table_create_and_load() {
             indices: HashMap::new(),
         },
     };
-    let create_result = db.run_create_table_query(create_table_query);
+    let create_result = db.run_create_table_query(&create_table_query);
     assert!(create_result.is_ok());
 
     let create_table_query = CreateTableQuery {
@@ -46,7 +46,7 @@ fn test_one_join_table_create_and_load() {
             indices: HashMap::new(),
         },
     };
-    let create_result = db.run_create_table_query(create_table_query);
+    let create_result = db.run_create_table_query(&create_table_query);
     assert!(create_result.is_ok());
 
     // ┌──┬─────┐   ┌─────┬─────┐
@@ -66,7 +66,7 @@ fn test_one_join_table_create_and_load() {
             ("value".into(), Value::I32(100)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -76,7 +76,7 @@ fn test_one_join_table_create_and_load() {
             ("value".into(), Value::I32(101)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -86,7 +86,7 @@ fn test_one_join_table_create_and_load() {
             ("value".into(), Value::I32(102)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -96,7 +96,7 @@ fn test_one_join_table_create_and_load() {
             ("value".into(), Value::I32(103)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -106,7 +106,7 @@ fn test_one_join_table_create_and_load() {
             ("value".into(), Value::I32(1000)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -116,7 +116,7 @@ fn test_one_join_table_create_and_load() {
             ("value".into(), Value::I32(2000)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -126,7 +126,7 @@ fn test_one_join_table_create_and_load() {
             ("value".into(), Value::I32(3002)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
@@ -136,7 +136,7 @@ fn test_one_join_table_create_and_load() {
             ("value".into(), Value::I32(4004)),
         ]),
     };
-    let insert_result = db.run_insert_query(insert_query);
+    let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
     // Total t1 query.

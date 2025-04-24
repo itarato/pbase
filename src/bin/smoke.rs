@@ -24,7 +24,7 @@ fn main() -> Result<(), Error> {
             },
         };
 
-        let result = db.run_create_table_query(create_table_query)?;
+        let result = db.run_create_table_query(&create_table_query)?;
         dbg!(result);
     }
 
@@ -32,7 +32,7 @@ fn main() -> Result<(), Error> {
         table: "example".into(),
         values: HashMap::from([("value".into(), Value::I32(123))]),
     };
-    let insert_result = db.run_insert_query(insert_query)?;
+    let insert_result = db.run_insert_query(&insert_query)?;
     dbg!(insert_result);
 
     let select_query = SelectQuery {
