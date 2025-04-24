@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, fs};
 
 use thiserror;
 
@@ -161,6 +161,12 @@ impl<'a> Iterator for SelectionIterator<'a> {
                 }
             }
         }
+    }
+}
+
+pub fn delete_all_files_by_glob(pattern: &str) {
+    for entry in glob::glob(pattern).expect("Failed to read files") {
+        fs::remove_file(entry.expect("Failed loading path")).expect("Failed deleting file");
     }
 }
 

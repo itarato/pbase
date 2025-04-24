@@ -1,11 +1,15 @@
 use indexmap::IndexMap;
+use pbase::common::delete_all_files_by_glob;
+use pbase::common::Error;
 use pbase::pbase::*;
 use pbase::query::*;
 use pbase::schema::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-fn main() {
+fn main() -> Result<(), Error> {
+    delete_all_files_by_glob("bigtable*");
+
     let db = PBase::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::new()));
 
     if !db.is_table_exist("bigtable") {
@@ -25,9 +29,11 @@ fn main() {
             },
         };
 
-        let result = db.run_create_table_query(create_table_query);
-        let _ = dbg!(result);
+        let result = db.run_create_table_query(create_table_query)?;
+        dbg!(result);
     } else {
         println!("Table already exist");
     }
+
+    Ok(())
 }

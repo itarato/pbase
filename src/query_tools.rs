@@ -358,46 +358,6 @@ impl<'a> SelectQueryExecutor<'a> {
         Selection::List(filtered_positions)
     }
 
-    fn materialize(
-        &self,
-        selection: Selection,
-        table_bytes: &[u8],
-        table_schemas: HashMap<String, &TableSchema>,
-    ) -> Vec<HashMap<String, Value>> {
-        let mut out = vec![];
-
-        let table_byte_len = table_bytes.len();
-        let row_byte_len = table_schemas[&self.query.from].row_byte_size();
-        if table_byte_len % row_byte_len != 0 {
-            panic!(
-                "Invalid table size. Table byte size ({}) is not multiple of row byte size ({}).",
-                table_byte_len, row_byte_len
-            );
-        }
-
-        match selection {
-            Selection::All => {
-                let mut pos = 0usize;
-                while pos < table_byte_len {
-                    let row = table_schemas[&self.query.from]
-                        .parse_row_bytes(&table_bytes[pos..pos + row_byte_len]);
-                    out.push(row);
-
-                    pos += row_byte_len;
-                }
-            }
-            Selection::List(positions) => {
-                for pos in positions {
-                    let row = table_schemas[&self.query.from]
-                        .parse_row_bytes(&table_bytes[pos..pos + row_byte_len]);
-                    out.push(row);
-                }
-            }
-        }
-
-        out
-    }
-
     fn materialize_view(
         &self,
         view: MultiTableView,

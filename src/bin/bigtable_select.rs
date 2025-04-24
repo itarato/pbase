@@ -12,24 +12,19 @@ fn main() -> Result<(), Error> {
     let db = PBase::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::new()));
 
     let query = SelectQuery {
-        // result: vec![FieldSelector {
-        //     name: "field1".into(),
-        //     source: "bigtable".into(),
-        // }],
         from: "bigtable".into(),
         joins: vec![],
         filters: vec![RowFilter {
             field: FieldSelector {
-                name: "field3".to_string(),
+                name: "field1".to_string(),
                 source: "bigtable".to_string(),
             },
-            op: std::cmp::Ordering::Equal,
-            rhs: Value::I32(-2),
+            op: std::cmp::Ordering::Greater,
+            rhs: Value::I32(0),
         }],
-        // limit: None,
     };
 
-    let result = db.run_select_query(query);
+    let result = db.run_select_query(query)?;
     dbg!(result);
 
     Ok(())

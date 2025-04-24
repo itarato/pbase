@@ -2,6 +2,7 @@ use std::{collections::HashMap, fs, path::PathBuf};
 
 use indexmap::IndexMap;
 use pbase::{
+    common::delete_all_files_by_glob,
     pbase::PBase,
     query::{CreateTableQuery, FieldSelector, InsertQuery, RowFilter, SelectQuery},
     schema::{FieldSchema, TableSchema},
@@ -10,7 +11,7 @@ use pbase::{
 
 #[test]
 fn test_basic_single_table_create_and_load() {
-    delete_all_by_glob("testtable*");
+    delete_all_files_by_glob("testtable*");
 
     let db = PBase::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::new()));
 
@@ -130,10 +131,4 @@ fn test_basic_single_table_create_and_load() {
         Value::I32(30),
         query_result.as_ref().unwrap()[0]["testtable.field2"]
     );
-}
-
-fn delete_all_by_glob(pattern: &str) {
-    for entry in glob::glob(pattern).expect("Failed to read 'testtable*' files") {
-        fs::remove_file(entry.expect("Failed loading path")).expect("Failed deleting file");
-    }
 }
