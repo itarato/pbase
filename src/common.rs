@@ -124,12 +124,9 @@ pub struct SelectionIterator<'a> {
 }
 
 impl<'a> SelectionIterator<'a> {
-    pub fn new(
-        selection: &'a Selection,
-        row_byte_len: usize,
-        table_byte_len: usize,
-    ) -> SelectionIterator<'a> {
-        SelectionIterator {
+    #[must_use]
+    pub const fn new(selection: &'a Selection, row_byte_len: usize, table_byte_len: usize) -> Self {
+        Self {
             selection,
             row_byte_len,
             table_byte_len,
@@ -138,7 +135,7 @@ impl<'a> SelectionIterator<'a> {
     }
 }
 
-impl<'a> Iterator for SelectionIterator<'a> {
+impl Iterator for SelectionIterator<'_> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -164,6 +161,7 @@ impl<'a> Iterator for SelectionIterator<'a> {
     }
 }
 
+/// # Panics
 pub fn delete_all_files_by_glob(pattern: &str) {
     for entry in glob::glob(pattern).expect("Failed to read files") {
         fs::remove_file(entry.expect("Failed loading path")).expect("Failed deleting file");
@@ -176,102 +174,111 @@ mod test {
 
     #[test]
     fn test_binary_narrow_to_range_exclusive() {
-        let list = vec![0, 0, 0, 1, 1, 1, 3, 3, 3];
+        let list = [0, 0, 0, 1, 1, 1, 3, 3, 3];
+        let len = i32::try_from(list.len()).unwrap();
 
         assert_eq!(
             (-1, 0),
-            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&-10))
+            binary_narrow_to_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
+                .cmp(&-10))
         );
         assert_eq!(
             (-1, 3),
-            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&0))
+            binary_narrow_to_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
+                .cmp(&0))
         );
         assert_eq!(
             (2, 6),
-            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&1))
+            binary_narrow_to_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
+                .cmp(&1))
         );
         assert_eq!(
             (5, 6),
-            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&2))
+            binary_narrow_to_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
+                .cmp(&2))
         );
         assert_eq!(
             (5, 9),
-            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&3))
+            binary_narrow_to_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
+                .cmp(&3))
         );
         assert_eq!(
             (8, 9),
-            binary_narrow_to_range_exclusive(-1, list.len() as i32, |i| list[i as usize].cmp(&10))
+            binary_narrow_to_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
+                .cmp(&10))
         );
     }
 
     #[test]
     fn test_binary_narrow_to_upper_range_exclusive() {
-        let list = vec![0, 0, 0, 1, 1, 1, 3, 3, 3];
+        let list = [0, 0, 0, 1, 1, 1, 3, 3, 3];
+        let len = i32::try_from(list.len()).unwrap();
 
         assert_eq!(
             -1,
-            binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_upper_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&-10))
         );
         assert_eq!(
             2,
-            binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_upper_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&0))
         );
         assert_eq!(
             5,
-            binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_upper_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&1))
         );
         assert_eq!(
             5,
-            binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_upper_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&2))
         );
         assert_eq!(
             8,
-            binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_upper_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&3))
         );
         assert_eq!(
             8,
-            binary_narrow_to_upper_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_upper_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&10))
         );
     }
 
     #[test]
     fn test_binary_narrow_to_lower_range_exclusive() {
-        let list = vec![0, 0, 0, 1, 1, 1, 3, 3, 3];
+        let list = [0, 0, 0, 1, 1, 1, 3, 3, 3];
+        let len = i32::try_from(list.len()).unwrap();
 
         assert_eq!(
             0,
-            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_lower_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&-10))
         );
         assert_eq!(
             0,
-            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_lower_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&0))
         );
         assert_eq!(
             3,
-            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_lower_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&1))
         );
         assert_eq!(
             6,
-            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_lower_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&2))
         );
         assert_eq!(
             6,
-            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_lower_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&3))
         );
         assert_eq!(
             9,
-            binary_narrow_to_lower_range_exclusive(-1, list.len() as i32, |i| list[i as usize]
+            binary_narrow_to_lower_range_exclusive(-1, len, |i| list[usize::try_from(i).unwrap()]
                 .cmp(&10))
         );
     }

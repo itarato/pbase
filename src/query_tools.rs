@@ -214,7 +214,7 @@ impl<'a> SelectQueryExecutor<'a> {
         table_schema: &TableSchema,
     ) -> Result<Selection, Error> {
         let index_row_byte_len = table_schema.index_row_byte_size(index_name);
-        let index_mmap = self.table_opener.index_mmap(&table_schema, &index_name)?;
+        let index_mmap = self.table_opener.index_mmap(table_schema, index_name)?;
         let index_bytes = &index_mmap[..];
         let index_fields = &table_schema.indices[index_name];
 

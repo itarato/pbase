@@ -2,6 +2,12 @@
 name = "pbase"
 version = "0.1.0"
 edition = "2021"
+description = "Toy database"
+license = "MIT"
+repository = "https://github.com/itarato/pbase"
+readme = "README.md"
+keywords = ["database"]
+categories = ["learning"]
 
 [dependencies]
 thiserror = "2.0"

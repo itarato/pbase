@@ -14,6 +14,7 @@ pub struct MultiTableViewRowReader<'a> {
 }
 
 impl<'a> MultiTableViewRowReader<'a> {
+    #[must_use]
     pub fn table_reader(&'a self, table_name: &str) -> TableReader<'a> {
         let table_pos_idx = self.tables[table_name];
         let table_row_pos = self.view_row[table_pos_idx];
@@ -32,11 +33,12 @@ pub struct MultiTableView {
 }
 
 impl MultiTableView {
+    #[must_use]
     pub fn new_from_table_bytes_and_selection(
         table_bytes: &[u8],
         table_schema: &TableSchema,
         selection: &Selection,
-    ) -> MultiTableView {
+    ) -> Self {
         let tables = HashMap::from([(table_schema.name.clone(), 0)]);
 
         let view = match selection {
@@ -45,20 +47,28 @@ impl MultiTableView {
                     .map(|pos| vec![pos])
                     .collect()
             }
-            Selection::List(positions) => positions.iter().map(|pos| vec![pos.clone()]).collect(),
+            Selection::List(positions) => positions.iter().map(|pos| vec![*pos]).collect(),
         };
 
-        MultiTableView { view, tables }
+        Self { view, tables }
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
-        return self.view.len();
+        self.view.len()
     }
 
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.view.is_empty()
+    }
+
+    #[must_use]
     pub fn row_pos(&self, row_idx: usize, table: &str) -> usize {
         self.view[row_idx][self.tables[table]]
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn join(
         &mut self,
         join_type: &JoinType,
@@ -83,6 +93,7 @@ impl MultiTableView {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn inner_join(
         &mut self,
         selection: &Selection,

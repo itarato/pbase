@@ -165,7 +165,7 @@ fn test_one_join_table_create_and_load() {
     // SELECT *
     // FROM t1
     // JOIN t2 ON t2.t1_id = t1.id
-    let query = SelectQuery {
+    let _query = SelectQuery {
         from: "t1".into(),
         joins: vec![JoinContract {
             join_type: pbase::query::JoinType::Inner,
