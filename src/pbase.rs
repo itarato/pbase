@@ -86,7 +86,7 @@ impl PBase {
     fn insert_to_index(
         &self,
         index_name: &str,
-        index_fields: &Vec<String>,
+        index_fields: &[String],
         query: &InsertQuery,
         table_schema: &TableSchema,
         row_ptr: TablePtrType,
@@ -109,6 +109,7 @@ impl PBase {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&index_file_name)
             .context(format!("Cannot open index file: {:?}", &index_file_name))?;
 
@@ -124,7 +125,7 @@ impl PBase {
                 .context("Convert index file to memory mapped file.")?
         };
         let insert_pos =
-            find_insert_pos_in_index(&index_name, &index_file_mmap, &index_values, &table_schema);
+            find_insert_pos_in_index(index_name, &index_file_mmap, &index_values, table_schema);
 
         // Divide index list + insert + merge
         let index_row_size = table_schema.index_row_byte_size(index_name);

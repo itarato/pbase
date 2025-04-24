@@ -9,6 +9,7 @@ pub struct FieldSelector {
 }
 
 impl FieldSelector {
+    #[must_use]
     pub fn full_name(&self) -> String {
         let mut out = self.source.clone();
         out += ".";

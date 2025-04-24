@@ -7,7 +7,10 @@ use log::debug;
 use memmap::Mmap;
 
 use crate::{
-    common::*,
+    common::{
+        binary_narrow_to_lower_range_exclusive, binary_narrow_to_range_exclusive,
+        binary_narrow_to_upper_range_exclusive, Error, Selection, SelectionIterator,
+    },
     multi_table_view::MultiTableView,
     query::{FieldSelector, FilterSource, RowFilter, SelectQuery},
     schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
@@ -21,13 +24,17 @@ pub struct SelectQueryExecutor<'a> {
 }
 
 impl<'a> SelectQueryExecutor<'a> {
-    pub fn new(table_opener: &'a TableOpener, query: SelectQuery) -> SelectQueryExecutor<'a> {
-        SelectQueryExecutor {
+    #[must_use]
+    pub const fn new(table_opener: &'a TableOpener, query: SelectQuery) -> Self {
+        Self {
             table_opener,
             query,
         }
     }
 
+    /// # Errors
+    ///
+    /// Errors on file operations.
     pub fn call(&self) -> Result<Vec<HashMap<String, Value>>, Error> {
         let table_schemas = self.collect_table_schemas_from_query()?;
 
@@ -43,7 +50,7 @@ impl<'a> SelectQueryExecutor<'a> {
         selections.insert(
             self.query.from.as_str(),
             self.execute_filters_on_single_tables(
-                &table_bytes_map[self.query.from.as_str()][..],
+                table_bytes_map[self.query.from.as_str()],
                 &table_schemas[self.query.from.as_str()],
             )?,
         );
@@ -51,7 +58,7 @@ impl<'a> SelectQueryExecutor<'a> {
             selections.insert(
                 self.query.from.as_str(),
                 self.execute_filters_on_single_tables(
-                    &table_bytes_map[join_contract.rhs.source.as_str()][..],
+                    table_bytes_map[join_contract.rhs.source.as_str()],
                     &table_schemas[join_contract.rhs.source.as_str()],
                 )?,
             );
@@ -74,7 +81,7 @@ impl<'a> SelectQueryExecutor<'a> {
         table_schema_map: &HashMap<&str, TableSchema>,
     ) -> MultiTableView {
         let mut view = MultiTableView::new_from_table_bytes_and_selection(
-            &table_bytes_map[self.query.from.as_str()][..],
+            table_bytes_map[self.query.from.as_str()],
             &table_schema_map[self.query.from.as_str()],
             &selections[self.query.from.as_str()],
         );
@@ -87,8 +94,8 @@ impl<'a> SelectQueryExecutor<'a> {
                 &join_contract.rhs.source,
                 &join_contract.lhs.name,
                 &join_contract.rhs.name,
-                &table_bytes_map,
-                &table_schema_map,
+                table_bytes_map,
+                table_schema_map,
             );
         }
 
@@ -123,13 +130,7 @@ impl<'a> SelectQueryExecutor<'a> {
             .filter(|row_filter| {
                 match row_filter.filter_source() {
                     // Ignore other table and multi table filters.
-                    FilterSource::Single(table_name) => {
-                        if table_name == table_schema.name {
-                            true
-                        } else {
-                            false
-                        }
-                    }
+                    FilterSource::Single(table_name) => table_name == table_schema.name,
                     FilterSource::Multi(_, _) => false,
                 }
             })
@@ -141,31 +142,22 @@ impl<'a> SelectQueryExecutor<'a> {
             .map(|row_filter| &row_filter.field.name)
             .collect();
 
-        if let Some(index_name) = index_for_query(&table_schema, &filter_fields) {
+        if let Some(index_name) = index_for_query(table_schema, &filter_fields) {
             debug!("Using index: {}", &index_name);
 
             // Index lookup.
-            selection = self.index_filter(&index_name, &filters_left, &table_schema)?;
+            selection = self.index_filter(&index_name, &filters_left, table_schema)?;
             debug!("Index filter result selection: {:?}", &selection);
 
             let index_fields = &table_schema.indices[&index_name];
-            filters_left = filters_left
-                .into_iter()
-                .filter_map(|filter| {
-                    if index_fields.contains(&filter.field.name) {
-                        None
-                    } else {
-                        Some(filter)
-                    }
-                })
-                .collect();
+            filters_left.retain(|filter| !index_fields.contains(&filter.field.name));
         } else {
             debug!("No index found");
         }
 
         // Linear scan the rest.
         if !filters_left.is_empty() {
-            selection = self.scan_filter(selection, &filters_left, &table_bytes, &table_schema);
+            selection = self.scan_filter(selection, &filters_left, table_bytes, table_schema);
         }
 
         Ok(selection)
