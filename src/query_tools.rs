@@ -71,7 +71,7 @@ impl<'a> SelectQueryExecutor<'a> {
         // TODO: execute multi-table filters.
 
         // Materialize the selection and return.
-        Ok(self.materialize_view(multi_table_view, &table_bytes_map, &table_schemas))
+        Ok(self.materialize_view(&multi_table_view, &table_bytes_map, &table_schemas))
     }
 
     fn generate_multi_table_view(
@@ -157,7 +157,7 @@ impl<'a> SelectQueryExecutor<'a> {
 
         // Linear scan the rest.
         if !filters_left.is_empty() {
-            selection = self.scan_filter(selection, &filters_left, table_bytes, table_schema);
+            selection = Self::scan_filter(&selection, &filters_left, table_bytes, table_schema);
         }
 
         Ok(selection)
@@ -214,7 +214,7 @@ impl<'a> SelectQueryExecutor<'a> {
         for filter in filters_left {
             filter_by_field_map
                 .entry(&filter.field.name)
-                .or_insert(vec![])
+                .or_default()
                 .push(filter);
         }
 
@@ -225,7 +225,7 @@ impl<'a> SelectQueryExecutor<'a> {
         // Iterate the crossection in order
         // Narrow down the index ranges
         let mut lhs_idx = -1i32; // Line index.
-        let mut rhs_idx = (index_bytes.len() / index_row_byte_len) as i32; // Line index.
+        let mut rhs_idx = i32::try_from(index_bytes.len() / index_row_byte_len).unwrap(); // Line index.
         for index_field in index_fields {
             if !filter_by_field_map.contains_key(index_field) {
                 // No more filters to leverage the index columns.
@@ -241,7 +241,8 @@ impl<'a> SelectQueryExecutor<'a> {
                     Ordering::Equal => {
                         (lhs_idx, rhs_idx) =
                             binary_narrow_to_range_exclusive(lhs_idx, rhs_idx, |i| {
-                                let index_row_pos = index_row_byte_len * i as usize;
+                                let index_row_pos =
+                                    index_row_byte_len * usize::try_from(i).unwrap();
                                 let index_value_pos = index_row_pos + index_field_byte_pos;
                                 let index_value = index_field_schema
                                     .value_from_bytes(&index_bytes[index_value_pos..]);
@@ -251,7 +252,7 @@ impl<'a> SelectQueryExecutor<'a> {
                     }
                     Ordering::Greater => {
                         lhs_idx = binary_narrow_to_upper_range_exclusive(lhs_idx, rhs_idx, |i| {
-                            let index_row_pos = index_row_byte_len * i as usize;
+                            let index_row_pos = index_row_byte_len * usize::try_from(i).unwrap();
                             let index_value_pos = index_row_pos + index_field_byte_pos;
                             let index_value = index_field_schema
                                 .value_from_bytes(&index_bytes[index_value_pos..]);
@@ -261,7 +262,7 @@ impl<'a> SelectQueryExecutor<'a> {
                     }
                     Ordering::Less => {
                         rhs_idx = binary_narrow_to_lower_range_exclusive(lhs_idx, rhs_idx, |i| {
-                            let index_row_pos = index_row_byte_len * i as usize;
+                            let index_row_pos = index_row_byte_len * usize::try_from(i).unwrap();
                             let index_value_pos = index_row_pos + index_field_byte_pos;
                             let index_value = index_field_schema
                                 .value_from_bytes(&index_bytes[index_value_pos..]);
@@ -269,18 +270,18 @@ impl<'a> SelectQueryExecutor<'a> {
                             index_value.cmp(&filter.rhs)
                         });
                     }
-                };
+                }
             }
         }
 
-        debug!("Index narrowing result range: ({}..{})", lhs_idx, rhs_idx);
+        debug!("Index narrowing result range: ({lhs_idx}..{rhs_idx})");
 
         // 3:
         // Collect positions from final range.
         let mut i = lhs_idx + 1;
         let mut out_positions = vec![];
         while i < rhs_idx {
-            let index_row_pos = i as usize * index_row_byte_len;
+            let index_row_pos = usize::try_from(i).unwrap() * index_row_byte_len;
             let index_row_row_idx_field_pos =
                 index_row_pos + table_schema.index_row_ptr_field_byte_pos(index_name);
 
@@ -289,7 +290,7 @@ impl<'a> SelectQueryExecutor<'a> {
                     ..index_row_row_idx_field_pos + TABLE_PTR_BYTE_SIZE]
                     .try_into()?,
             );
-            out_positions.push(table_row_ptr as usize);
+            out_positions.push(usize::try_from(table_row_ptr).unwrap());
 
             i += 1;
         }
@@ -303,36 +304,29 @@ impl<'a> SelectQueryExecutor<'a> {
     // Filters a selection on a table using row-fitlers line by line (no index use).
     //
     fn scan_filter(
-        &self,
-        current_selection: Selection,
+        current_selection: &Selection,
         filters: &Vec<&RowFilter>,
         table_bytes: &[u8],
         table_schema: &TableSchema,
     ) -> Selection {
         let table_byte_len = table_bytes.len();
         let row_byte_len = table_schema.row_byte_size();
-        if table_byte_len % row_byte_len != 0 {
-            panic!(
-                "Invalid table size. Table byte size ({}) is not multiple of row byte size ({}).",
-                table_byte_len, row_byte_len
-            );
-        }
+        assert!(table_byte_len % row_byte_len == 0, "Invalid table size. Table byte size ({table_byte_len}) is not multiple of row byte size ({row_byte_len}).");
+        assert!(!filters.is_empty());
 
-        assert!(filters.len() > 0);
-
-        let selection_it = SelectionIterator::new(&current_selection, row_byte_len, table_byte_len);
+        let selection_it = SelectionIterator::new(current_selection, row_byte_len, table_byte_len);
         let mut filtered_positions = vec![];
         for pos in selection_it {
             let row_bytes = &table_bytes[pos..pos + row_byte_len];
 
             // We need to go through all filters.
             for filter in filters {
-                if filter.field.source != table_schema.name {
-                    panic!(
-                        "Wrong filter. Table: {} Filter source: {}",
-                        table_schema.name, filter.field.source
-                    );
-                }
+                assert!(
+                    filter.field.source == table_schema.name,
+                    "Wrong filter. Table: {} Filter source: {}",
+                    table_schema.name,
+                    filter.field.source
+                );
 
                 // Skip if not match.
                 let filter_field_pos = table_schema.field_byte_pos(&filter.field.name);
@@ -352,7 +346,7 @@ impl<'a> SelectQueryExecutor<'a> {
 
     fn materialize_view(
         &self,
-        view: MultiTableView,
+        view: &MultiTableView,
         table_bytes_map: &HashMap<&str, &[u8]>,
         table_schema_map: &HashMap<&str, TableSchema>,
     ) -> Vec<HashMap<String, Value>> {
@@ -379,7 +373,7 @@ impl<'a> SelectQueryExecutor<'a> {
             }
         }
 
-        for view_reader in view.iter(&table_bytes_map, &table_schema_map) {
+        for view_reader in view.iter(table_bytes_map, table_schema_map) {
             let mut out_row = HashMap::new();
             for output_field in &output_fields {
                 let table_reader = view_reader.table_reader(&output_field.source);
@@ -394,17 +388,21 @@ impl<'a> SelectQueryExecutor<'a> {
     }
 }
 
-pub fn index_for_query(
+#[must_use]
+pub fn index_for_query<S>(
     table_schema: &TableSchema,
-    filter_fields: &HashSet<&String>,
-) -> Option<String> {
-    let ref available_indices = table_schema.indices;
+    filter_fields: &HashSet<&String, S>,
+) -> Option<String>
+where
+    S: ::std::hash::BuildHasher,
+{
+    let available_indices = &table_schema.indices;
 
     let mut best_index_name: Option<String> = None;
     let mut best_index_score = 0i32;
 
     for (index_name, index_fields) in available_indices {
-        let index_score = index_score(index_fields, &filter_fields);
+        let index_score = index_score(index_fields, filter_fields);
 
         if index_score > best_index_score {
             best_index_score = index_score;
@@ -415,7 +413,10 @@ pub fn index_for_query(
     best_index_name
 }
 
-pub fn index_score(index_fields: &Vec<String>, filter_fields: &HashSet<&String>) -> i32 {
+pub fn index_score<S>(index_fields: &Vec<String>, filter_fields: &HashSet<&String, S>) -> i32
+where
+    S: ::std::hash::BuildHasher,
+{
     let mut score = 0i32;
 
     for index_field in index_fields {
@@ -429,16 +430,20 @@ pub fn index_score(index_fields: &Vec<String>, filter_fields: &HashSet<&String>)
     score
 }
 
+/// # Panics
+///
+/// On numerical bit overflow when table size is too big.
+#[must_use]
 pub fn find_insert_pos_in_index(
     index_name: &str,
     index_bytes: &[u8],
-    index_values: &Vec<&Value>,
+    index_values: &[&Value],
     table_schema: &TableSchema,
 ) -> usize {
     let index_row_size = table_schema.index_row_byte_size(index_name);
 
     let mut lhs_idx = -1i32;
-    let mut rhs_idx = (index_bytes.len() / index_row_size) as i32;
+    let mut rhs_idx = i32::try_from(index_bytes.len() / index_row_size).unwrap();
 
     let mut field_byte_pos = 0usize;
     let mut field_idx = 0usize;
