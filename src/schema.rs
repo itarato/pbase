@@ -50,12 +50,12 @@ pub struct TableSchema {
 impl TableSchema {
     #[must_use]
     pub fn row_byte_size(&self) -> usize {
-        self.fields
-            .values()
-            .map(|field_schema| field_schema.byte_size())
-            .sum()
+        self.fields.values().map(FieldSchema::byte_size).sum()
     }
 
+    /// # Panics
+    ///
+    /// When field is not found.
     #[must_use]
     pub fn field_byte_pos(&self, field_name: &str) -> usize {
         let mut pos = 0usize;
@@ -70,11 +70,16 @@ impl TableSchema {
         panic!("Field '{}' not found in table '{}'", field_name, self.name)
     }
 
+    /// # Panics
+    ///
+    /// When index not found.
     #[must_use]
     pub fn index_row_byte_size(&self, index_name: &str) -> usize {
-        if !self.indices.contains_key(index_name) {
-            panic!("Index {} not found in table {}", index_name, self.name);
-        }
+        assert!(
+            self.indices.contains_key(index_name),
+            "Index {index_name} not found in table {}",
+            self.name
+        );
 
         let fields_total_byte_len: usize = self.indices[index_name]
             .iter()
@@ -86,8 +91,7 @@ impl TableSchema {
 
     #[must_use]
     pub fn data_row_to_bytes(&self, values: &HashMap<String, Value>) -> Vec<u8> {
-        let mut bytes = vec![];
-        bytes.resize(self.row_byte_size(), 0u8);
+        let mut bytes = vec![0; self.row_byte_size()];
 
         for (field_name, field_value) in values {
             field_value.copy_bytes_to(&mut bytes[self.field_byte_pos(field_name)..]);
@@ -103,8 +107,7 @@ impl TableSchema {
         values: &HashMap<String, Value>,
         row_ptr: TablePtrType,
     ) -> Vec<u8> {
-        let mut out = vec![];
-        out.resize(self.index_row_byte_size(index_name), 0u8);
+        let mut out = vec![0; self.index_row_byte_size(index_name)];
 
         let mut pos = 0usize;
         for index_field in &self.indices[index_name] {
@@ -165,7 +168,7 @@ pub struct TableReader<'a> {
 
 impl<'a> TableReader<'a> {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         table_schema: &'a TableSchema,
         row_bytes: &'a [u8],
         absolute_pos: usize,
@@ -193,7 +196,7 @@ pub struct TableRowIterator<'a> {
 
 impl<'a> TableRowIterator<'a> {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         table_schema: &'a TableSchema,
         table_bytes: &'a [u8],
         selection: &'a Selection,
@@ -214,14 +217,14 @@ impl<'a> TableRowIterator<'a> {
             self.current_pos += self.table_schema.row_byte_size();
 
             Some(TableReader::new(
-                &self.table_schema,
+                self.table_schema,
                 &self.table_bytes[pos..pos + self.table_schema.row_byte_size()],
                 pos,
             ))
         }
     }
 
-    fn next_with_positions(&mut self, positions: &Vec<usize>) -> Option<TableReader<'a>> {
+    fn next_with_positions(&mut self, positions: &[usize]) -> Option<TableReader<'a>> {
         if self.current_pos >= positions.len() {
             None
         } else {
@@ -229,7 +232,7 @@ impl<'a> TableRowIterator<'a> {
             self.current_pos += 1;
 
             Some(TableReader::new(
-                &self.table_schema,
+                self.table_schema,
                 &self.table_bytes[current_pos..current_pos + self.table_schema.row_byte_size()],
                 current_pos,
             ))
@@ -256,7 +259,7 @@ pub struct TableRowPositionIterator {
 
 impl TableRowPositionIterator {
     #[must_use]
-    pub fn new(row_size: usize, table_size: usize) -> Self {
+    pub const fn new(row_size: usize, table_size: usize) -> Self {
         Self {
             row_size,
             table_size,
@@ -313,18 +316,18 @@ mod test {
             indices: HashMap::from([]),
         };
 
-        table_schema.field_byte_pos("missing");
+        let _ = table_schema.field_byte_pos("missing");
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Index missing not found in table t1")]
     fn test_missing_index_access_panics() {
         let table_schema = TableSchema {
             name: "t1".to_string(),
             fields: IndexMap::from([]),
             indices: HashMap::from([]),
         };
-        table_schema.index_row_byte_size("missing");
+        let _ = table_schema.index_row_byte_size("missing");
     }
 
     #[test]
@@ -406,9 +409,9 @@ mod test {
         let bytes: [u8; 12] = [1, 2, 3, 4, 5, 5, 5, 5, 6, 7, 8, 9];
         let values = table_schema.parse_row_bytes(&bytes);
 
-        assert_eq!(Value::I32(0x04030201), values["f1"]);
-        assert_eq!(Value::I32(0x05050505), values["f2"]);
-        assert_eq!(Value::I32(0x09080706), values["f3"]);
+        assert_eq!(Value::I32(0x0403_0201), values["f1"]);
+        assert_eq!(Value::I32(0x0505_0505), values["f2"]);
+        assert_eq!(Value::I32(0x0908_0706), values["f3"]);
     }
 
     #[test]
