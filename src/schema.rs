@@ -56,6 +56,7 @@ impl TableSchema {
             .sum()
     }
 
+    #[must_use]
     pub fn field_byte_pos(&self, field_name: &str) -> usize {
         let mut pos = 0usize;
         for (schema_field_name, field_schema) in &self.fields {
@@ -69,6 +70,7 @@ impl TableSchema {
         panic!("Field '{}' not found in table '{}'", field_name, self.name)
     }
 
+    #[must_use]
     pub fn index_row_byte_size(&self, index_name: &str) -> usize {
         if !self.indices.contains_key(index_name) {
             panic!("Index {} not found in table {}", index_name, self.name);
@@ -82,6 +84,7 @@ impl TableSchema {
         fields_total_byte_len + TABLE_PTR_BYTE_SIZE
     }
 
+    #[must_use]
     pub fn data_row_to_bytes(&self, values: &HashMap<String, Value>) -> Vec<u8> {
         let mut bytes = vec![];
         bytes.resize(self.row_byte_size(), 0u8);
@@ -93,6 +96,7 @@ impl TableSchema {
         bytes
     }
 
+    #[must_use]
     pub fn index_row_to_bytes(
         &self,
         index_name: &str,
@@ -117,6 +121,7 @@ impl TableSchema {
         out
     }
 
+    #[must_use]
     pub fn index_field_byte_pos(&self, index_name: &str, index_field: &str) -> usize {
         let mut pos = 0usize;
         for field in &self.indices[index_name] {
@@ -130,10 +135,12 @@ impl TableSchema {
         unreachable!()
     }
 
+    #[must_use]
     pub fn index_row_ptr_field_byte_pos(&self, index_name: &str) -> usize {
         self.index_row_byte_size(index_name) - TABLE_PTR_BYTE_SIZE
     }
 
+    #[must_use]
     pub fn parse_row_bytes(&self, bytes: &[u8]) -> HashMap<String, Value> {
         let mut out = HashMap::new();
 
@@ -157,18 +164,20 @@ pub struct TableReader<'a> {
 }
 
 impl<'a> TableReader<'a> {
+    #[must_use]
     pub fn new(
         table_schema: &'a TableSchema,
         row_bytes: &'a [u8],
         absolute_pos: usize,
-    ) -> TableReader<'a> {
-        TableReader {
+    ) -> Self {
+        Self {
             table_schema,
             row_bytes,
             absolute_pos,
         }
     }
 
+    #[must_use]
     pub fn get_field_value(&self, field: &str) -> Value {
         let field_pos = self.table_schema.field_byte_pos(field);
         self.table_schema.fields[field].value_from_bytes(&self.row_bytes[field_pos..])
@@ -183,12 +192,13 @@ pub struct TableRowIterator<'a> {
 }
 
 impl<'a> TableRowIterator<'a> {
+    #[must_use]
     pub fn new(
         table_schema: &'a TableSchema,
         table_bytes: &'a [u8],
         selection: &'a Selection,
-    ) -> TableRowIterator<'a> {
-        TableRowIterator {
+    ) -> Self {
+        Self {
             table_schema,
             table_bytes,
             selection,
@@ -245,8 +255,9 @@ pub struct TableRowPositionIterator {
 }
 
 impl TableRowPositionIterator {
-    pub fn new(row_size: usize, table_size: usize) -> TableRowPositionIterator {
-        TableRowPositionIterator {
+    #[must_use]
+    pub fn new(row_size: usize, table_size: usize) -> Self {
+        Self {
             row_size,
             table_size,
             current_pos: 0,
