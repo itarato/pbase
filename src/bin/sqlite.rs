@@ -1,5 +1,4 @@
 use rand::prelude::*;
-use sqlite;
 
 fn main() {
     let connection = sqlite::open("database.db").expect("Failed to open database");

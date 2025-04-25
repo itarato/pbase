@@ -29,8 +29,8 @@ fn main() -> Result<(), Error> {
             },
         };
 
-        let result = db.run_create_table_query(&create_table_query)?;
-        dbg!(result);
+        db.run_create_table_query(&create_table_query)?;
+        println!("Success!");
     } else {
         println!("Table already exist");
     }
