@@ -22,7 +22,7 @@ pub struct PBase {
 
 impl PBase {
     #[must_use]
-    pub fn new(current_dir: PathBuf) -> Self {
+    pub const fn new(current_dir: PathBuf) -> Self {
         Self {
             table_opener: TableOpener::new(current_dir),
         }
