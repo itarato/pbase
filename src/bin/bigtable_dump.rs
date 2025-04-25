@@ -13,7 +13,7 @@ fn main() -> Result<(), Error> {
     let table_opener = TableOpener::new(current_dir);
 
     // SCHEMA
-    let schema_file_name = table_opener.table_schema_file_name(&table_name);
+    let schema_file_name = table_opener.table_schema_file_name(table_name);
     let schema_file = File::open(schema_file_name).context("Failed to open schema file")?;
     let table_schema: TableSchema =
         serde_json::from_reader(schema_file).context("Failed parsing schema")?;
@@ -21,7 +21,7 @@ fn main() -> Result<(), Error> {
     dbg!(&table_schema);
 
     // DATA
-    let data_file_name = table_opener.table_data_file_name(&table_name);
+    let data_file_name = table_opener.table_data_file_name(table_name);
     let mut data_file = File::open(data_file_name).context("Cannot open data file")?;
     let mut data_buf: Vec<u8> = vec![];
     data_file
@@ -49,7 +49,7 @@ fn main() -> Result<(), Error> {
     for (index_name, index_fields) in &table_schema.indices {
         println!("Index #{}", index_name);
 
-        let index_file_name = table_opener.index_file_name(&table_name, &index_name);
+        let index_file_name = table_opener.index_file_name(table_name, index_name);
         let mut index_file = File::open(index_file_name).context("Failed opening index file")?;
         let mut index_buf: Vec<u8> = vec![];
         index_file
@@ -58,7 +58,7 @@ fn main() -> Result<(), Error> {
 
         let mut pos = 0usize;
         let mut row_idx = 0usize;
-        let index_row_byte_size = table_schema.index_row_byte_size(&index_name);
+        let index_row_byte_size = table_schema.index_row_byte_size(index_name);
         while pos < index_buf.len() {
             println!("\tRow #{}:", row_idx);
             let mut field_pos = 0usize;
