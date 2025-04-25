@@ -14,18 +14,23 @@ pub enum FieldSchema {
 }
 
 impl FieldSchema {
-    pub fn byte_size(&self) -> usize {
+    #[must_use]
+    pub const fn byte_size(&self) -> usize {
         match self {
-            FieldSchema::U8 => 1,
-            FieldSchema::I32 => 4,
+            Self::U8 => 1,
+            Self::I32 => 4,
         }
     }
 
+    /// # Panics
+    ///
+    /// When byte stream is invalid.
+    #[must_use]
     pub fn value_from_bytes(&self, bytes: &[u8]) -> Value {
         let value_bytes = &bytes[0..self.byte_size()];
         match self {
-            FieldSchema::U8 => Value::U8(value_bytes[0]),
-            FieldSchema::I32 => {
+            Self::U8 => Value::U8(value_bytes[0]),
+            Self::I32 => {
                 let value = i32::from_le_bytes(
                     value_bytes.try_into().expect("slice with incorrect length"),
                 );
@@ -43,6 +48,7 @@ pub struct TableSchema {
 }
 
 impl TableSchema {
+    #[must_use]
     pub fn row_byte_size(&self) -> usize {
         self.fields
             .values()
