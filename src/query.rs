@@ -25,16 +25,21 @@ pub enum FilterSource {
 }
 
 impl FilterSource {
-    pub fn new_single(table: String) -> FilterSource {
-        FilterSource::Single(table)
+    #[must_use]
+    pub const fn new_single(table: String) -> Self {
+        Self::Single(table)
     }
 
-    pub fn new_multi(table_lhs: String, table_rhs: String) -> FilterSource {
+    /// # Panics
+    ///
+    /// Panics when the tables are the same.
+    #[must_use]
+    pub fn new_multi(table_lhs: String, table_rhs: String) -> Self {
         assert!(table_lhs != table_rhs);
         if table_lhs <= table_rhs {
-            FilterSource::Multi(table_lhs, table_rhs)
+            Self::Multi(table_lhs, table_rhs)
         } else {
-            FilterSource::Multi(table_rhs, table_lhs)
+            Self::Multi(table_rhs, table_lhs)
         }
     }
 }
@@ -48,6 +53,7 @@ pub struct RowFilter {
 }
 
 impl RowFilter {
+    #[must_use]
     pub fn filter_source(&self) -> FilterSource {
         FilterSource::Single(self.field.source.clone())
     }
