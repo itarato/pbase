@@ -446,22 +446,20 @@ pub fn find_insert_pos_in_index(
     let mut rhs_idx = i32::try_from(index_bytes.len() / index_row_size).unwrap();
 
     let mut field_byte_pos = 0usize;
-    let mut field_idx = 0usize;
-    for index_field_name in &table_schema.indices[index_name] {
+    for (field_idx, index_field_name) in table_schema.indices[index_name].iter().enumerate() {
         let field_schema = &table_schema.fields[index_field_name];
         let cmp_value = index_values[field_idx];
 
         (lhs_idx, rhs_idx) = binary_narrow_to_range_exclusive(lhs_idx, rhs_idx, |i| {
-            let value_bytes_pos = i as usize * index_row_size + field_byte_pos;
+            let value_bytes_pos = usize::try_from(i).unwrap() * index_row_size + field_byte_pos;
             let value = field_schema.value_from_bytes(&index_bytes[value_bytes_pos..]);
             value.cmp(cmp_value)
         });
 
         field_byte_pos += field_schema.byte_size();
-        field_idx += 1;
     }
 
-    rhs_idx as usize
+    usize::try_from(rhs_idx).unwrap()
 }
 
 #[cfg(test)]
@@ -539,42 +537,12 @@ mod test {
             indices: HashMap::from([("fake_index".to_string(), vec!["col1".to_string()])]),
         };
 
-        assert_find_insert_pos_in_index(
-            vec![[0], [0], [1], [1], [3], [3]],
-            vec![2],
-            4,
-            &table_schema,
-        );
-        assert_find_insert_pos_in_index(
-            vec![[0], [0], [1], [1], [3], [3]],
-            vec![1],
-            4,
-            &table_schema,
-        );
-        assert_find_insert_pos_in_index(
-            vec![[0], [0], [1], [1], [3], [3]],
-            vec![0],
-            2,
-            &table_schema,
-        );
-        assert_find_insert_pos_in_index(
-            vec![[0], [0], [1], [1], [3], [3]],
-            vec![3],
-            6,
-            &table_schema,
-        );
-        assert_find_insert_pos_in_index(
-            vec![[0], [0], [1], [1], [3], [3]],
-            vec![-1],
-            0,
-            &table_schema,
-        );
-        assert_find_insert_pos_in_index(
-            vec![[0], [0], [1], [1], [3], [3]],
-            vec![4],
-            6,
-            &table_schema,
-        );
+        assert_find_insert_pos_in_index(&[[0], [0], [1], [1], [3], [3]], &[2], 4, &table_schema);
+        assert_find_insert_pos_in_index(&[[0], [0], [1], [1], [3], [3]], &[1], 4, &table_schema);
+        assert_find_insert_pos_in_index(&[[0], [0], [1], [1], [3], [3]], &[0], 2, &table_schema);
+        assert_find_insert_pos_in_index(&[[0], [0], [1], [1], [3], [3]], &[3], 6, &table_schema);
+        assert_find_insert_pos_in_index(&[[0], [0], [1], [1], [3], [3]], &[-1], 0, &table_schema);
+        assert_find_insert_pos_in_index(&[[0], [0], [1], [1], [3], [3]], &[4], 6, &table_schema);
     }
 
     #[test]
@@ -593,7 +561,7 @@ mod test {
 
         #[rustfmt::skip]
         assert_find_insert_pos_in_index(
-            vec![
+            &[
                 [0, 0],
                 [0, 1],
                 [0, 2],
@@ -604,14 +572,14 @@ mod test {
                 [3, 1],
                 [3, 2],
             ],
-            vec![2, 0],
+            &[2, 0],
             6,
             &table_schema
         );
 
         #[rustfmt::skip]
         assert_find_insert_pos_in_index(
-            vec![
+            &[
                 [0, 0],
                 [0, 1],
                 [0, 2],
@@ -622,7 +590,7 @@ mod test {
                 [3, 1],
                 [3, 2],
             ],
-            vec![1, 1],
+            &[1, 1],
             5,
             &table_schema
         );
@@ -651,8 +619,8 @@ mod test {
     }
 
     fn assert_find_insert_pos_in_index<const INDEX_LEN: usize>(
-        index_content: Vec<[i32; INDEX_LEN]>,
-        to_find: Vec<i32>,
+        index_content: &[[i32; INDEX_LEN]],
+        to_find: &[i32],
         expected: usize,
         table_schema: &TableSchema,
     ) {
@@ -668,7 +636,7 @@ mod test {
 
                 as_vec
             })
-            .flat_map(|v| v.to_le_bytes())
+            .flat_map(i32::to_le_bytes)
             .collect::<Vec<_>>();
 
         let index_bytes = &index_bytes[..];
@@ -676,7 +644,7 @@ mod test {
         let index_values_refs: Vec<&Value> = index_values.iter().collect();
 
         let result =
-            find_insert_pos_in_index(index_name, index_bytes, &index_values_refs, &table_schema);
+            find_insert_pos_in_index(index_name, index_bytes, &index_values_refs, table_schema);
 
         assert_eq!(expected, result);
     }
