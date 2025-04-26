@@ -14,9 +14,15 @@ pub struct MultiTableViewRowReader<'a> {
 }
 
 impl<'a> MultiTableViewRowReader<'a> {
+    /// # Panics
+    ///
+    /// On bad query requesting bad table name.
     #[must_use]
     pub fn table_reader(&'a self, table_name: &str) -> TableReader<'a> {
-        let table_pos_idx = self.tables[table_name];
+        let table_pos_idx = *self
+            .tables
+            .get(table_name)
+            .unwrap_or_else(|| panic!("Missing table {table_name}"));
         let table_row_pos = self.view_row[table_pos_idx];
 
         let row_bytes_size = self.table_schema_map[table_name].row_byte_size();

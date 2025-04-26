@@ -56,7 +56,7 @@ impl<'a> SelectQueryExecutor<'a> {
         );
         for join_contract in &self.query.joins {
             selections.insert(
-                self.query.from.as_str(),
+                join_contract.rhs.source.as_str(),
                 self.execute_filters_on_single_tables(
                     table_bytes_map[join_contract.rhs.source.as_str()],
                     &table_schemas[join_contract.rhs.source.as_str()],
@@ -367,8 +367,8 @@ impl<'a> SelectQueryExecutor<'a> {
                 .keys()
             {
                 output_fields.push(FieldSelector {
-                    name: join_contract.rhs.source.clone(),
-                    source: join_field.clone(),
+                    name: join_field.clone(),
+                    source: join_contract.rhs.source.clone(),
                 });
             }
         }

@@ -3,13 +3,173 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use indexmap::IndexMap;
 use pbase::{
     pbase::PBase,
-    query::{CreateTableQuery, FieldSelector, InsertQuery, JoinContract, SelectQuery},
+    query::{CreateTableQuery, FieldSelector, InsertQuery, JoinContract, RowFilter, SelectQuery},
     schema::{FieldSchema, TableSchema},
     value::Value,
 };
 
 #[test]
-fn test_one_join_table_create_and_load() {
+fn test_run_all() {
+    test_single_tables();
+    test_join_table_all();
+    test_join_table_filtered();
+}
+
+fn test_single_tables() {
+    let db = setup_multi_tables();
+
+    // Total t1 query.
+    let query = SelectQuery {
+        from: "t1".into(),
+        joins: vec![],
+        filters: vec![],
+    };
+
+    let query_result = db.run_select_query(query);
+    assert!(query_result.is_ok());
+    assert_eq!(4, query_result.as_ref().unwrap().len());
+
+    // Total t2 query.
+    let query = SelectQuery {
+        from: "t2".into(),
+        joins: vec![],
+        filters: vec![],
+    };
+
+    let query_result = db.run_select_query(query);
+    assert!(query_result.is_ok());
+    assert_eq!(4, query_result.as_ref().unwrap().len());
+}
+
+fn test_join_table_all() {
+    let db = setup_multi_tables();
+
+    // Join query:
+    // SELECT *
+    // FROM t1
+    // JOIN t2 ON t2.t1_id = t1.id
+    let query = SelectQuery {
+        from: "t1".into(),
+        joins: vec![JoinContract {
+            join_type: pbase::query::JoinType::Inner,
+            lhs: FieldSelector {
+                name: "id".into(),
+                source: "t1".into(),
+            },
+            rhs: FieldSelector {
+                name: "t1_id".into(),
+                source: "t2".into(),
+            },
+        }],
+        filters: vec![],
+    };
+    let query_result = db.run_select_query(query);
+    assert!(query_result.is_ok());
+    let query_result = query_result.unwrap();
+    assert_eq!(3, query_result.len());
+
+    // ┌──┬─────┐   ┌─────┬─────┐
+    // │id│value│   │t1_id│value│
+    // ├──┼─────┤   ├─────┼─────┤
+    // │0 │100  │   │0    │1000 │
+    // │1 │101  │   │0    │2000 │
+    // │2 │102  │   │2    │3002 │
+    // │3 │103  │   │4    │4004 │
+    // └──┴─────┘   └─────┴─────┘
+
+    assert_eq!(
+        HashMap::from([
+            ("t1.id".to_string(), Value::I32(0)),
+            ("t1.value".to_string(), Value::I32(100)),
+            ("t2.t1_id".to_string(), Value::I32(0)),
+            ("t2.value".to_string(), Value::I32(1000)),
+        ]),
+        query_result[0],
+    );
+    assert_eq!(
+        HashMap::from([
+            ("t1.id".to_string(), Value::I32(0)),
+            ("t1.value".to_string(), Value::I32(100)),
+            ("t2.t1_id".to_string(), Value::I32(0)),
+            ("t2.value".to_string(), Value::I32(2000)),
+        ]),
+        query_result[1],
+    );
+    assert_eq!(
+        HashMap::from([
+            ("t1.id".to_string(), Value::I32(2)),
+            ("t1.value".to_string(), Value::I32(102)),
+            ("t2.t1_id".to_string(), Value::I32(2)),
+            ("t2.value".to_string(), Value::I32(3002)),
+        ]),
+        query_result[2],
+    );
+}
+
+fn test_join_table_filtered() {
+    let db = setup_multi_tables();
+
+    // Join query:
+    // SELECT *
+    // FROM t1
+    // JOIN t2 ON t2.t1_id = t1.id
+    let query = SelectQuery {
+        from: "t1".into(),
+        joins: vec![JoinContract {
+            join_type: pbase::query::JoinType::Inner,
+            lhs: FieldSelector {
+                name: "id".into(),
+                source: "t1".into(),
+            },
+            rhs: FieldSelector {
+                name: "t1_id".into(),
+                source: "t2".into(),
+            },
+        }],
+        filters: vec![RowFilter {
+            field: FieldSelector {
+                name: "value".to_string(),
+                source: "t2".to_string(),
+            },
+            op: std::cmp::Ordering::Greater,
+            rhs: Value::I32(1500),
+        }],
+    };
+    let query_result = db.run_select_query(query);
+    assert!(query_result.is_ok());
+    let query_result = query_result.unwrap();
+    assert_eq!(2, query_result.len());
+
+    // ┌──┬─────┐   ┌─────┬─────┐
+    // │id│value│   │t1_id│value│
+    // ├──┼─────┤   ├─────┼─────┤
+    // │0 │100  │   │0    │1000 │
+    // │1 │101  │   │0    │2000 │
+    // │2 │102  │   │2    │3002 │
+    // │3 │103  │   │4    │4004 │
+    // └──┴─────┘   └─────┴─────┘
+
+    assert_eq!(
+        HashMap::from([
+            ("t1.id".to_string(), Value::I32(0)),
+            ("t1.value".to_string(), Value::I32(100)),
+            ("t2.t1_id".to_string(), Value::I32(0)),
+            ("t2.value".to_string(), Value::I32(2000)),
+        ]),
+        query_result[0],
+    );
+    assert_eq!(
+        HashMap::from([
+            ("t1.id".to_string(), Value::I32(2)),
+            ("t1.value".to_string(), Value::I32(102)),
+            ("t2.t1_id".to_string(), Value::I32(2)),
+            ("t2.value".to_string(), Value::I32(3002)),
+        ]),
+        query_result[1],
+    );
+}
+
+fn setup_multi_tables() -> PBase {
     delete_all_by_glob("t1*");
     delete_all_by_glob("t2*");
 
@@ -139,47 +299,7 @@ fn test_one_join_table_create_and_load() {
     let insert_result = db.run_insert_query(&insert_query);
     assert!(insert_result.is_ok());
 
-    // Total t1 query.
-    let query = SelectQuery {
-        from: "t1".into(),
-        joins: vec![],
-        filters: vec![],
-    };
-
-    let query_result = db.run_select_query(query);
-    assert!(query_result.is_ok());
-    assert_eq!(4, query_result.as_ref().unwrap().len());
-
-    // Total t2 query.
-    let query = SelectQuery {
-        from: "t2".into(),
-        joins: vec![],
-        filters: vec![],
-    };
-
-    let query_result = db.run_select_query(query);
-    assert!(query_result.is_ok());
-    assert_eq!(4, query_result.as_ref().unwrap().len());
-
-    // Join query:
-    // SELECT *
-    // FROM t1
-    // JOIN t2 ON t2.t1_id = t1.id
-    let _query = SelectQuery {
-        from: "t1".into(),
-        joins: vec![JoinContract {
-            join_type: pbase::query::JoinType::Inner,
-            lhs: FieldSelector {
-                name: "id".into(),
-                source: "t1".into(),
-            },
-            rhs: FieldSelector {
-                name: "t1_id".into(),
-                source: "t2".into(),
-            },
-        }],
-        filters: vec![],
-    };
+    db
 }
 
 fn delete_all_by_glob(pattern: &str) {
