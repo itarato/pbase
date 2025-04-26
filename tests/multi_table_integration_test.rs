@@ -9,18 +9,12 @@ use pbase::{
 };
 
 #[test]
-fn test_run_all() {
-    test_single_tables();
-    test_join_table_all();
-    test_join_table_filtered();
-}
-
 fn test_single_tables() {
-    let db = setup_multi_tables();
+    let db = setup_multi_tables("qqq");
 
     // Total t1 query.
     let query = SelectQuery {
-        from: "t1".into(),
+        from: "qqq_t1".into(),
         joins: vec![],
         filters: vec![],
     };
@@ -31,7 +25,7 @@ fn test_single_tables() {
 
     // Total t2 query.
     let query = SelectQuery {
-        from: "t2".into(),
+        from: "qqq_t2".into(),
         joins: vec![],
         filters: vec![],
     };
@@ -41,24 +35,25 @@ fn test_single_tables() {
     assert_eq!(4, query_result.as_ref().unwrap().len());
 }
 
+#[test]
 fn test_join_table_all() {
-    let db = setup_multi_tables();
+    let db = setup_multi_tables("www");
 
     // Join query:
     // SELECT *
     // FROM t1
     // JOIN t2 ON t2.t1_id = t1.id
     let query = SelectQuery {
-        from: "t1".into(),
+        from: "www_t1".into(),
         joins: vec![JoinContract {
             join_type: pbase::query::JoinType::Inner,
             lhs: FieldSelector {
                 name: "id".into(),
-                source: "t1".into(),
+                source: "www_t1".into(),
             },
             rhs: FieldSelector {
                 name: "t1_id".into(),
-                source: "t2".into(),
+                source: "www_t2".into(),
             },
         }],
         filters: vec![],
@@ -79,57 +74,58 @@ fn test_join_table_all() {
 
     assert_eq!(
         HashMap::from([
-            ("t1.id".to_string(), Value::I32(0)),
-            ("t1.value".to_string(), Value::I32(100)),
-            ("t2.t1_id".to_string(), Value::I32(0)),
-            ("t2.value".to_string(), Value::I32(1000)),
+            ("www_t1.id".to_string(), Value::I32(0)),
+            ("www_t1.value".to_string(), Value::I32(100)),
+            ("www_t2.t1_id".to_string(), Value::I32(0)),
+            ("www_t2.value".to_string(), Value::I32(1000)),
         ]),
         query_result[0],
     );
     assert_eq!(
         HashMap::from([
-            ("t1.id".to_string(), Value::I32(0)),
-            ("t1.value".to_string(), Value::I32(100)),
-            ("t2.t1_id".to_string(), Value::I32(0)),
-            ("t2.value".to_string(), Value::I32(2000)),
+            ("www_t1.id".to_string(), Value::I32(0)),
+            ("www_t1.value".to_string(), Value::I32(100)),
+            ("www_t2.t1_id".to_string(), Value::I32(0)),
+            ("www_t2.value".to_string(), Value::I32(2000)),
         ]),
         query_result[1],
     );
     assert_eq!(
         HashMap::from([
-            ("t1.id".to_string(), Value::I32(2)),
-            ("t1.value".to_string(), Value::I32(102)),
-            ("t2.t1_id".to_string(), Value::I32(2)),
-            ("t2.value".to_string(), Value::I32(3002)),
+            ("www_t1.id".to_string(), Value::I32(2)),
+            ("www_t1.value".to_string(), Value::I32(102)),
+            ("www_t2.t1_id".to_string(), Value::I32(2)),
+            ("www_t2.value".to_string(), Value::I32(3002)),
         ]),
         query_result[2],
     );
 }
 
+#[test]
 fn test_join_table_filtered() {
-    let db = setup_multi_tables();
+    let db = setup_multi_tables("eee");
 
     // Join query:
     // SELECT *
     // FROM t1
     // JOIN t2 ON t2.t1_id = t1.id
     let query = SelectQuery {
-        from: "t1".into(),
+        from: "eee_t1".into(),
         joins: vec![JoinContract {
             join_type: pbase::query::JoinType::Inner,
             lhs: FieldSelector {
                 name: "id".into(),
-                source: "t1".into(),
+                source: "eee_t1".into(),
             },
             rhs: FieldSelector {
                 name: "t1_id".into(),
-                source: "t2".into(),
+                source: "eee_t2".into(),
             },
         }],
         filters: vec![RowFilter {
             field: FieldSelector {
                 name: "value".to_string(),
-                source: "t2".to_string(),
+                source: "eee_t2".to_string(),
             },
             op: std::cmp::Ordering::Greater,
             rhs: Value::I32(1500),
@@ -151,27 +147,30 @@ fn test_join_table_filtered() {
 
     assert_eq!(
         HashMap::from([
-            ("t1.id".to_string(), Value::I32(0)),
-            ("t1.value".to_string(), Value::I32(100)),
-            ("t2.t1_id".to_string(), Value::I32(0)),
-            ("t2.value".to_string(), Value::I32(2000)),
+            ("eee_t1.id".to_string(), Value::I32(0)),
+            ("eee_t1.value".to_string(), Value::I32(100)),
+            ("eee_t2.t1_id".to_string(), Value::I32(0)),
+            ("eee_t2.value".to_string(), Value::I32(2000)),
         ]),
         query_result[0],
     );
     assert_eq!(
         HashMap::from([
-            ("t1.id".to_string(), Value::I32(2)),
-            ("t1.value".to_string(), Value::I32(102)),
-            ("t2.t1_id".to_string(), Value::I32(2)),
-            ("t2.value".to_string(), Value::I32(3002)),
+            ("eee_t1.id".to_string(), Value::I32(2)),
+            ("eee_t1.value".to_string(), Value::I32(102)),
+            ("eee_t2.t1_id".to_string(), Value::I32(2)),
+            ("eee_t2.value".to_string(), Value::I32(3002)),
         ]),
         query_result[1],
     );
 }
 
-fn setup_multi_tables() -> PBase {
-    delete_all_by_glob("t1*");
-    delete_all_by_glob("t2*");
+fn setup_multi_tables(prefix: &str) -> PBase {
+    let t1_name = format!("{prefix}_t1");
+    let t2_name = format!("{prefix}_t2");
+
+    delete_all_by_glob(format!("{t1_name}*").as_str());
+    delete_all_by_glob(format!("{t2_name}*").as_str());
 
     let db = PBase::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::new()));
 
@@ -185,7 +184,7 @@ fn setup_multi_tables() -> PBase {
     // Create tables.
     let create_table_query = CreateTableQuery {
         schema: TableSchema {
-            name: "t1".into(),
+            name: t1_name.clone(),
             fields: IndexMap::from([
                 ("id".into(), FieldSchema::I32),
                 ("value".into(), FieldSchema::I32),
@@ -198,7 +197,7 @@ fn setup_multi_tables() -> PBase {
 
     let create_table_query = CreateTableQuery {
         schema: TableSchema {
-            name: "t2".into(),
+            name: t2_name.clone(),
             fields: IndexMap::from([
                 ("t1_id".into(), FieldSchema::I32),
                 ("value".into(), FieldSchema::I32),
@@ -220,7 +219,7 @@ fn setup_multi_tables() -> PBase {
 
     // Insert.
     let insert_query = InsertQuery {
-        table: "t1".into(),
+        table: t1_name.clone(),
         values: HashMap::from([
             ("id".into(), Value::I32(0)),
             ("value".into(), Value::I32(100)),
@@ -230,7 +229,7 @@ fn setup_multi_tables() -> PBase {
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
-        table: "t1".into(),
+        table: t1_name.clone(),
         values: HashMap::from([
             ("id".into(), Value::I32(1)),
             ("value".into(), Value::I32(101)),
@@ -240,7 +239,7 @@ fn setup_multi_tables() -> PBase {
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
-        table: "t1".into(),
+        table: t1_name.clone(),
         values: HashMap::from([
             ("id".into(), Value::I32(2)),
             ("value".into(), Value::I32(102)),
@@ -250,7 +249,7 @@ fn setup_multi_tables() -> PBase {
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
-        table: "t1".into(),
+        table: t1_name.clone(),
         values: HashMap::from([
             ("id".into(), Value::I32(3)),
             ("value".into(), Value::I32(103)),
@@ -260,7 +259,7 @@ fn setup_multi_tables() -> PBase {
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
-        table: "t2".into(),
+        table: t2_name.clone(),
         values: HashMap::from([
             ("t1_id".into(), Value::I32(0)),
             ("value".into(), Value::I32(1000)),
@@ -270,7 +269,7 @@ fn setup_multi_tables() -> PBase {
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
-        table: "t2".into(),
+        table: t2_name.clone(),
         values: HashMap::from([
             ("t1_id".into(), Value::I32(0)),
             ("value".into(), Value::I32(2000)),
@@ -280,7 +279,7 @@ fn setup_multi_tables() -> PBase {
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
-        table: "t2".into(),
+        table: t2_name.clone(),
         values: HashMap::from([
             ("t1_id".into(), Value::I32(2)),
             ("value".into(), Value::I32(3002)),
@@ -290,7 +289,7 @@ fn setup_multi_tables() -> PBase {
     assert!(insert_result.is_ok());
 
     let insert_query = InsertQuery {
-        table: "t2".into(),
+        table: t2_name.clone(),
         values: HashMap::from([
             ("t1_id".into(), Value::I32(4)),
             ("value".into(), Value::I32(4004)),
