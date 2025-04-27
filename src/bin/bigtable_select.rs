@@ -1,7 +1,7 @@
 use pbase::{
     common::Error,
     pbase::PBase,
-    query::{FieldSelector, RowFilter, SelectQuery},
+    query::{FieldSelector, RhsValue, RowFilter, SelectQuery},
     value::*,
 };
 use std::path::PathBuf;
@@ -20,7 +20,7 @@ fn main() -> Result<(), Error> {
                 source: "bigtable".to_string(),
             },
             op: std::cmp::Ordering::Greater,
-            rhs: Value::I32(0),
+            rhs: RhsValue::Value(Value::I32(0)),
         }],
     };
 

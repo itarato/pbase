@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use pbase::{
     common::delete_all_files_by_glob,
     pbase::PBase,
-    query::{CreateTableQuery, FieldSelector, InsertQuery, RowFilter, SelectQuery},
+    query::{CreateTableQuery, FieldSelector, InsertQuery, RhsValue, RowFilter, SelectQuery},
     schema::{FieldSchema, TableSchema},
     value::Value,
 };
@@ -78,7 +78,7 @@ fn test_basic_single_table_create_and_load() {
                 source: "testtable".to_string(),
             },
             op: std::cmp::Ordering::Equal,
-            rhs: Value::I32(2),
+            rhs: RhsValue::Value(Value::I32(2)),
         }],
     };
 
@@ -99,7 +99,7 @@ fn test_basic_single_table_create_and_load() {
                 source: "testtable".to_string(),
             },
             op: std::cmp::Ordering::Less,
-            rhs: Value::I32(2),
+            rhs: RhsValue::Value(Value::I32(2)),
         }],
     };
 
@@ -120,7 +120,7 @@ fn test_basic_single_table_create_and_load() {
                 source: "testtable".to_string(),
             },
             op: std::cmp::Ordering::Greater,
-            rhs: Value::I32(2),
+            rhs: RhsValue::Value(Value::I32(2)),
         }],
     };
 

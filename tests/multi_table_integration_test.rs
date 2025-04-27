@@ -3,7 +3,10 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use indexmap::IndexMap;
 use pbase::{
     pbase::PBase,
-    query::{CreateTableQuery, FieldSelector, InsertQuery, JoinContract, RowFilter, SelectQuery},
+    query::{
+        CreateTableQuery, FieldSelector, InsertQuery, JoinContract, RhsValue, RowFilter,
+        SelectQuery,
+    },
     schema::{FieldSchema, TableSchema},
     value::Value,
 };
@@ -128,7 +131,7 @@ fn test_join_table_filtered() {
                 source: "eee_t2".to_string(),
             },
             op: std::cmp::Ordering::Greater,
-            rhs: Value::I32(1500),
+            rhs: RhsValue::Value(Value::I32(1500)),
         }],
     };
     let query_result = db.run_select_query(query);

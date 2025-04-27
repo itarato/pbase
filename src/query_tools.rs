@@ -12,7 +12,7 @@ use crate::{
         binary_narrow_to_upper_range_exclusive, Error, Selection, SelectionIterator,
     },
     multi_table_view::MultiTableView,
-    query::{FieldSelector, FilterSource, RowFilter, SelectQuery},
+    query::{FieldSelector, FilterSource, RhsValue, RowFilter, SelectQuery},
     schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
     value::Value,
@@ -236,6 +236,8 @@ impl<'a> SelectQueryExecutor<'a> {
             let index_field_schema = &table_schema.fields[index_field];
 
             for filter in &filter_by_field_map[index_field] {
+                let rhs_value = filter.rhs.as_value();
+
                 // Narrow the range.
                 match filter.op {
                     Ordering::Equal => {
@@ -247,7 +249,7 @@ impl<'a> SelectQueryExecutor<'a> {
                                 let index_value = index_field_schema
                                     .value_from_bytes(&index_bytes[index_value_pos..]);
 
-                                index_value.cmp(&filter.rhs)
+                                index_value.cmp(rhs_value)
                             });
                     }
                     Ordering::Greater => {
@@ -257,7 +259,7 @@ impl<'a> SelectQueryExecutor<'a> {
                             let index_value = index_field_schema
                                 .value_from_bytes(&index_bytes[index_value_pos..]);
 
-                            index_value.cmp(&filter.rhs)
+                            index_value.cmp(rhs_value)
                         });
                     }
                     Ordering::Less => {
@@ -267,7 +269,7 @@ impl<'a> SelectQueryExecutor<'a> {
                             let index_value = index_field_schema
                                 .value_from_bytes(&index_bytes[index_value_pos..]);
 
-                            index_value.cmp(&filter.rhs)
+                            index_value.cmp(rhs_value)
                         });
                     }
                 }
@@ -332,7 +334,7 @@ impl<'a> SelectQueryExecutor<'a> {
                 let filter_field_pos = table_schema.field_byte_pos(&filter.field.name);
                 let field_schema = &table_schema.fields[&filter.field.name];
                 let value = field_schema.value_from_bytes(&row_bytes[filter_field_pos..]);
-                let is_satisfy = value.cmp(&filter.rhs) == filter.op;
+                let is_satisfy = value.cmp(filter.rhs.as_value()) == filter.op;
 
                 if is_satisfy {
                     // Add to filtered positions.

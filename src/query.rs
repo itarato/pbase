@@ -45,17 +45,51 @@ impl FilterSource {
 }
 
 #[derive(Clone)]
+pub enum RhsValue {
+    Value(Value),
+    Ref(FieldSelector),
+}
+
+impl RhsValue {
+    /// # Panics
+    ///
+    /// Caller is reponsible for ensuring it's the value variant.
+    #[must_use]
+    pub fn as_value(&self) -> &Value {
+        match self {
+            Self::Value(v) => v,
+            Self::Ref(_) => panic!("Unexpected reference value in single index filtering"),
+        }
+    }
+
+    /// # Panics
+    ///
+    /// Caller is reponsible for ensuring it's the reference variant.
+    #[must_use]
+    pub fn as_field_selector(&self) -> &FieldSelector {
+        match self {
+            Self::Ref(field_selector) => field_selector,
+            Self::Value(_) => panic!("Unexpected regular value in single index filtering"),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct RowFilter {
     pub field: FieldSelector,
     pub op: Ordering,
-    // TODO: when `rhs` can be a join-ed field, `self.filter_source` needs to support mutli-source.
-    pub rhs: Value,
+    pub rhs: RhsValue,
 }
 
 impl RowFilter {
     #[must_use]
     pub fn filter_source(&self) -> FilterSource {
-        FilterSource::Single(self.field.source.clone())
+        match &self.rhs {
+            RhsValue::Value(_) => FilterSource::Single(self.field.source.clone()),
+            RhsValue::Ref(reference) => {
+                FilterSource::new_multi(self.field.source.clone(), reference.source.clone())
+            }
+        }
     }
 }
 
