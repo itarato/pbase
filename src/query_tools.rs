@@ -314,7 +314,7 @@ impl<'a> SelectQueryExecutor<'a> {
         assert!(table_byte_len % row_byte_len == 0, "Invalid table size. Table byte size ({table_byte_len}) is not multiple of row byte size ({row_byte_len}).");
         assert!(!filters.is_empty());
 
-        let table_filters: Vec<&&RowFilter> = filters
+        let table_filters: Vec<RowFilter> = filters
             .iter()
             .filter(|row_filter| match row_filter.filter_source() {
                 FilterSource::Single(source) => source == table_schema.name,
@@ -322,6 +322,7 @@ impl<'a> SelectQueryExecutor<'a> {
                     source_lhs == table_schema.name && source_rhs == table_schema.name
                 }
             })
+            .map(|row_filter| (*row_filter).clone())
             .collect();
 
         let selection_it = SelectionIterator::new(current_selection, row_byte_len, table_byte_len);
@@ -332,17 +333,19 @@ impl<'a> SelectQueryExecutor<'a> {
             // We need to go through all filters.
             for filter in &table_filters {
                 // Skip if not match.
-                let is_satisfy = match &filter.rhs {
-                    RhsValue::Value(rhs_value) => {
-                        let filter_field_pos = table_schema.field_byte_pos(&filter.field.name);
-                        let field_schema = &table_schema.fields[&filter.field.name];
-                        let value = field_schema.value_from_bytes(&row_bytes[filter_field_pos..]);
+                let filter_field_pos = table_schema.field_byte_pos(&filter.field.name);
+                let field_schema = &table_schema.fields[&filter.field.name];
+                let value = field_schema.value_from_bytes(&row_bytes[filter_field_pos..]);
 
-                        value.cmp(rhs_value) == filter.op
-                    }
+                let is_satisfy = match &filter.rhs {
+                    RhsValue::Value(rhs_value) => value.cmp(rhs_value) == filter.op,
                     RhsValue::Ref(rhs_reference) => {
-                        todo!("Handle multi table + same table filters too");
-                        unimplemented!();
+                        let rhs_filter_field_pos = table_schema.field_byte_pos(&rhs_reference.name);
+                        let rhs_field_schema = &table_schema.fields[&rhs_reference.name];
+                        let rhs_value =
+                            rhs_field_schema.value_from_bytes(&row_bytes[rhs_filter_field_pos..]);
+
+                        value.cmp(&rhs_value) == filter.op
                     }
                 };
 
@@ -353,12 +356,7 @@ impl<'a> SelectQueryExecutor<'a> {
             }
         }
 
-        filters.retain(|row_filter| match row_filter.filter_source() {
-            FilterSource::Single(source) => source != table_schema.name,
-            FilterSource::Multi(source_lhs, source_rhs) => {
-                source_lhs != table_schema.name || source_rhs != table_schema.name
-            }
-        });
+        filters.retain(|row_filter| !table_filters.contains(row_filter));
 
         Selection::List(filtered_positions)
     }
