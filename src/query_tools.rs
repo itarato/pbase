@@ -12,7 +12,7 @@ use crate::{
         binary_narrow_to_upper_range_exclusive, Error, Selection, SelectionIterator,
     },
     multi_table_view::MultiTableView,
-    query::{FieldSelector, FilterSource, RowFilter, SelectQuery},
+    query::{FieldSelector, FilterSource, RhsValue, RowFilter, SelectQuery},
     schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
     value::Value,
@@ -45,6 +45,8 @@ impl<'a> SelectQueryExecutor<'a> {
             .map(|(k, v)| (*k, &v[..]))
             .collect();
 
+        let mut filters_left: Vec<&RowFilter> = self.query.filters.iter().collect();
+
         // Reducing table search spaces using single table filters.
         let mut selections: HashMap<&str, Selection> = HashMap::new();
         selections.insert(
@@ -52,6 +54,7 @@ impl<'a> SelectQueryExecutor<'a> {
             self.execute_filters_on_single_tables(
                 table_bytes_map[self.query.from.as_str()],
                 &table_schemas[self.query.from.as_str()],
+                &mut filters_left,
             )?,
         );
         for join_contract in &self.query.joins {
@@ -60,6 +63,7 @@ impl<'a> SelectQueryExecutor<'a> {
                 self.execute_filters_on_single_tables(
                     table_bytes_map[join_contract.rhs.source.as_str()],
                     &table_schemas[join_contract.rhs.source.as_str()],
+                    &mut filters_left,
                 )?,
             );
         }
@@ -68,7 +72,7 @@ impl<'a> SelectQueryExecutor<'a> {
         let multi_table_view =
             self.generate_multi_table_view(&selections, &table_bytes_map, &table_schemas);
 
-        todo!("Execute multi table (different table) filters and generate a selection.");
+        todo!("Execute multi table (different table) filters and generate a selection. Leftover filters are in `filters_left`.");
 
         // Materialize the selection and return.
         Ok(self.materialize_view(&multi_table_view, &table_bytes_map, &table_schemas))
@@ -109,6 +113,7 @@ impl<'a> SelectQueryExecutor<'a> {
         &self,
         table_bytes: &[u8],
         table_schema: &TableSchema,
+        filters_left: &mut Vec<&RowFilter>,
     ) -> Result<Selection, Error> {
         let mut selection = Selection::All;
 
@@ -123,48 +128,28 @@ impl<'a> SelectQueryExecutor<'a> {
         // NOTE: We're only doing a single index filter (if there is one change at least).
         // There might be a better performance to evaluate more than one and using a crossecton of the pos-list results. Later.
 
-        todo!("This should contain all filters (single + multi).");
-        let mut filters_left: Vec<&RowFilter> = self
-            .query
-            .filters
+        // Establish current subset.
+        let index_filterable_fields: HashSet<&String> = filters_left
             .iter()
-            .filter(|row_filter| {
-                match row_filter.filter_source() {
-                    // Ignore other table and multi table filters.
-                    FilterSource::Single(table_name) => table_name == table_schema.name,
-                    FilterSource::Multi(_, _) => false,
-                }
+            .filter_map(|row_filter| match row_filter.rhs {
+                RhsValue::Value(_) => Some(&row_filter.field.name),
+                RhsValue::Ref(_) => None,
             })
             .collect();
 
-        todo!("Index filters can only use single table filters. Only use fields from those.");
-        // Establish current subset.
-        let filter_fields: HashSet<&String> = filters_left
-            .iter()
-            .map(|row_filter| &row_filter.field.name)
-            .collect();
-
-        if let Some(index_name) = index_for_query(table_schema, &filter_fields) {
+        if let Some(index_name) = index_for_query(table_schema, &index_filterable_fields) {
             debug!("Using index: {}", &index_name);
 
             // Index lookup.
-            selection = self.index_filter(&index_name, &filters_left, table_schema)?;
+            selection = self.index_filter(&index_name, filters_left, table_schema)?;
             debug!("Index filter result selection: {:?}", &selection);
-
-            let index_fields = &table_schema.indices[&index_name];
-
-            todo!(
-                "Do not decouple filter removal. Send a ref-mut to the filter to remove it itself"
-            );
-            filters_left.retain(|filter| !index_fields.contains(&filter.field.name));
         } else {
             debug!("No index found");
         }
 
         // Linear scan the rest.
         if !filters_left.is_empty() {
-            todo!("Only single table filters AND same-table multi table filters.");
-            selection = Self::scan_filter(&selection, &filters_left, table_bytes, table_schema);
+            selection = Self::scan_filter(&selection, filters_left, table_bytes, table_schema);
         }
 
         Ok(selection)
@@ -209,7 +194,7 @@ impl<'a> SelectQueryExecutor<'a> {
     fn index_filter(
         &self,
         index_name: &str,
-        filters_left: &Vec<&RowFilter>,
+        filters_left: &mut Vec<&RowFilter>,
         table_schema: &TableSchema,
     ) -> Result<Selection, Error> {
         let index_row_byte_len = table_schema.index_row_byte_size(index_name);
@@ -217,13 +202,16 @@ impl<'a> SelectQueryExecutor<'a> {
         let index_bytes = &index_mmap[..];
         let index_fields = &table_schema.indices[index_name];
 
-        let mut filter_by_field_map: HashMap<&String, Vec<&RowFilter>> = HashMap::new();
-        todo!("Consider multi-table filters: skip those.");
-        for filter in filters_left {
+        let mut filter_by_field_map: HashMap<&String, Vec<RowFilter>> = HashMap::new();
+        for filter in filters_left.iter() {
+            if filter.is_multi_table() {
+                continue;
+            }
+
             filter_by_field_map
                 .entry(&filter.field.name)
                 .or_default()
-                .push(filter);
+                .push((*filter).clone());
         }
 
         // 1 / 2:
@@ -282,7 +270,7 @@ impl<'a> SelectQueryExecutor<'a> {
                     }
                 }
 
-                todo!("Remove the exact filter");
+                filters_left.retain(|row_filter| row_filter != &filter);
             }
         }
 
@@ -317,7 +305,7 @@ impl<'a> SelectQueryExecutor<'a> {
     //
     fn scan_filter(
         current_selection: &Selection,
-        filters: &Vec<&RowFilter>,
+        filters: &mut Vec<&RowFilter>,
         table_bytes: &[u8],
         table_schema: &TableSchema,
     ) -> Selection {
@@ -326,25 +314,37 @@ impl<'a> SelectQueryExecutor<'a> {
         assert!(table_byte_len % row_byte_len == 0, "Invalid table size. Table byte size ({table_byte_len}) is not multiple of row byte size ({row_byte_len}).");
         assert!(!filters.is_empty());
 
+        let table_filters: Vec<&&RowFilter> = filters
+            .iter()
+            .filter(|row_filter| match row_filter.filter_source() {
+                FilterSource::Single(source) => source == table_schema.name,
+                FilterSource::Multi(source_lhs, source_rhs) => {
+                    source_lhs == table_schema.name && source_rhs == table_schema.name
+                }
+            })
+            .collect();
+
         let selection_it = SelectionIterator::new(current_selection, row_byte_len, table_byte_len);
         let mut filtered_positions = vec![];
         for pos in selection_it {
             let row_bytes = &table_bytes[pos..pos + row_byte_len];
 
             // We need to go through all filters.
-            for filter in filters {
-                assert!(
-                    filter.field.source == table_schema.name,
-                    "Wrong filter. Table: {} Filter source: {}",
-                    table_schema.name,
-                    filter.field.source
-                );
-
+            for filter in &table_filters {
                 // Skip if not match.
-                let filter_field_pos = table_schema.field_byte_pos(&filter.field.name);
-                let field_schema = &table_schema.fields[&filter.field.name];
-                let value = field_schema.value_from_bytes(&row_bytes[filter_field_pos..]);
-                let is_satisfy = value.cmp(filter.rhs.as_value()) == filter.op;
+                let is_satisfy = match &filter.rhs {
+                    RhsValue::Value(rhs_value) => {
+                        let filter_field_pos = table_schema.field_byte_pos(&filter.field.name);
+                        let field_schema = &table_schema.fields[&filter.field.name];
+                        let value = field_schema.value_from_bytes(&row_bytes[filter_field_pos..]);
+
+                        value.cmp(rhs_value) == filter.op
+                    }
+                    RhsValue::Ref(rhs_reference) => {
+                        todo!("Handle multi table + same table filters too");
+                        unimplemented!();
+                    }
+                };
 
                 if is_satisfy {
                     // Add to filtered positions.
@@ -352,6 +352,13 @@ impl<'a> SelectQueryExecutor<'a> {
                 }
             }
         }
+
+        filters.retain(|row_filter| match row_filter.filter_source() {
+            FilterSource::Single(source) => source != table_schema.name,
+            FilterSource::Multi(source_lhs, source_rhs) => {
+                source_lhs != table_schema.name || source_rhs != table_schema.name
+            }
+        });
 
         Selection::List(filtered_positions)
     }

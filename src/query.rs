@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use crate::{schema::TableSchema, value::Value};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct FieldSelector {
     pub name: String,
     pub source: String,
@@ -44,7 +44,7 @@ impl FilterSource {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum RhsValue {
     Value(Value),
     Ref(FieldSelector),
@@ -74,7 +74,7 @@ impl RhsValue {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct RowFilter {
     pub field: FieldSelector,
     pub op: Ordering,
@@ -89,6 +89,27 @@ impl RowFilter {
             RhsValue::Ref(reference) => {
                 FilterSource::new_multi(self.field.source.clone(), reference.source.clone())
             }
+        }
+    }
+
+    #[must_use]
+    pub const fn is_multi_table(&self) -> bool {
+        match self.rhs {
+            RhsValue::Value(_) => false,
+            RhsValue::Ref(_) => true,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_single_table(&self) -> bool {
+        !self.is_multi_table()
+    }
+
+    #[must_use]
+    pub fn is_multi_same_table(&self) -> bool {
+        match &self.rhs {
+            RhsValue::Value(_) => false,
+            RhsValue::Ref(reference) => reference.source == self.field.source,
         }
     }
 }
