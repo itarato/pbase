@@ -68,7 +68,7 @@ impl<'a> SelectQueryExecutor<'a> {
         let multi_table_view =
             self.generate_multi_table_view(&selections, &table_bytes_map, &table_schemas);
 
-        // TODO: execute multi-table filters.
+        todo!("Execute multi table (different table) filters and generate a selection.");
 
         // Materialize the selection and return.
         Ok(self.materialize_view(&multi_table_view, &table_bytes_map, &table_schemas))
@@ -123,6 +123,7 @@ impl<'a> SelectQueryExecutor<'a> {
         // NOTE: We're only doing a single index filter (if there is one change at least).
         // There might be a better performance to evaluate more than one and using a crossecton of the pos-list results. Later.
 
+        todo!("This should contain all filters (single + multi).");
         let mut filters_left: Vec<&RowFilter> = self
             .query
             .filters
@@ -136,6 +137,7 @@ impl<'a> SelectQueryExecutor<'a> {
             })
             .collect();
 
+        todo!("Index filters can only use single table filters. Only use fields from those.");
         // Establish current subset.
         let filter_fields: HashSet<&String> = filters_left
             .iter()
@@ -150,6 +152,10 @@ impl<'a> SelectQueryExecutor<'a> {
             debug!("Index filter result selection: {:?}", &selection);
 
             let index_fields = &table_schema.indices[&index_name];
+
+            todo!(
+                "Do not decouple filter removal. Send a ref-mut to the filter to remove it itself"
+            );
             filters_left.retain(|filter| !index_fields.contains(&filter.field.name));
         } else {
             debug!("No index found");
@@ -157,6 +163,7 @@ impl<'a> SelectQueryExecutor<'a> {
 
         // Linear scan the rest.
         if !filters_left.is_empty() {
+            todo!("Only single table filters AND same-table multi table filters.");
             selection = Self::scan_filter(&selection, &filters_left, table_bytes, table_schema);
         }
 
@@ -211,6 +218,7 @@ impl<'a> SelectQueryExecutor<'a> {
         let index_fields = &table_schema.indices[index_name];
 
         let mut filter_by_field_map: HashMap<&String, Vec<&RowFilter>> = HashMap::new();
+        todo!("Consider multi-table filters: skip those.");
         for filter in filters_left {
             filter_by_field_map
                 .entry(&filter.field.name)
@@ -273,6 +281,8 @@ impl<'a> SelectQueryExecutor<'a> {
                         });
                     }
                 }
+
+                todo!("Remove the exact filter");
             }
         }
 
