@@ -12,7 +12,7 @@ use crate::{
         binary_narrow_to_upper_range_exclusive, Error, Selection, SelectionIterator,
     },
     multi_table_view::MultiTableView,
-    query::{FieldSelector, FilterSource, RhsValue, RowFilter, SelectQuery},
+    query::{FieldSelector, FilterSource, RowFilter, SelectQuery},
     schema::{TablePtrType, TableSchema, TABLE_PTR_BYTE_SIZE},
     table_opener::TableOpener,
     value::Value,
