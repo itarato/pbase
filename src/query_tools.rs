@@ -36,7 +36,7 @@ impl<'a> SelectQueryExecutor<'a> {
     ///
     /// Errors on file operations.
     pub fn call(&self) -> Result<Vec<HashMap<String, Value>>, Error> {
-        let table_schemas = self.collect_table_schemas_from_query()?;
+        let table_schema_map = self.collect_table_schemas_from_query()?;
 
         // Preloading memory mapped table files for main table and all join tables.
         let table_bytes_mmap_map: HashMap<&str, Mmap> = self.collect_table_bytes_map()?;
@@ -53,7 +53,7 @@ impl<'a> SelectQueryExecutor<'a> {
             self.query.from.as_str(),
             self.execute_filters_on_single_tables(
                 table_bytes_map[self.query.from.as_str()],
-                &table_schemas[self.query.from.as_str()],
+                &table_schema_map[self.query.from.as_str()],
                 &mut filters_left,
             )?,
         );
@@ -62,7 +62,7 @@ impl<'a> SelectQueryExecutor<'a> {
                 join_contract.rhs.source.as_str(),
                 self.execute_filters_on_single_tables(
                     table_bytes_map[join_contract.rhs.source.as_str()],
-                    &table_schemas[join_contract.rhs.source.as_str()],
+                    &table_schema_map[join_contract.rhs.source.as_str()],
                     &mut filters_left,
                 )?,
             );
@@ -70,12 +70,22 @@ impl<'a> SelectQueryExecutor<'a> {
 
         // Compile joined view. (Assuming we will need all to present/filter.)
         let multi_table_view =
-            self.generate_multi_table_view(&selections, &table_bytes_map, &table_schemas);
+            self.generate_multi_table_view(&selections, &table_bytes_map, &table_schema_map);
 
-        todo!("Execute multi table (different table) filters and generate a selection. Leftover filters are in `filters_left`.");
+        // todo!("Execute multi table (different table) filters and generate a selection. Leftover filters are in `filters_left`.");
+        let view_selection = self.execute_filters_on_multi_view(
+            &table_bytes_map,
+            &table_schema_map,
+            &mut filters_left,
+        )?;
 
         // Materialize the selection and return.
-        Ok(self.materialize_view(&multi_table_view, &table_bytes_map, &table_schemas))
+        Ok(self.materialize_view(
+            &multi_table_view,
+            &view_selection,
+            &table_bytes_map,
+            &table_schema_map,
+        ))
     }
 
     fn generate_multi_table_view(
@@ -155,6 +165,15 @@ impl<'a> SelectQueryExecutor<'a> {
         Ok(selection)
     }
 
+    fn execute_filters_on_multi_view(
+        &self,
+        table_bytes_map: &HashMap<&str, &[u8]>,
+        table_schema_map: &HashMap<&str, TableSchema>,
+        filters_left: &mut Vec<&RowFilter>,
+    ) -> Result<Selection, Error> {
+        unimplemented!()
+    }
+
     fn collect_table_schemas_from_query(&self) -> Result<HashMap<&str, TableSchema>, Error> {
         let mut table_schemas = HashMap::new();
 
@@ -205,6 +224,9 @@ impl<'a> SelectQueryExecutor<'a> {
         let mut filter_by_field_map: HashMap<&String, Vec<RowFilter>> = HashMap::new();
         for filter in filters_left.iter() {
             if filter.is_multi_table() {
+                continue;
+            }
+            if filter.field.source != table_schema.name {
                 continue;
             }
 
@@ -364,6 +386,7 @@ impl<'a> SelectQueryExecutor<'a> {
     fn materialize_view(
         &self,
         view: &MultiTableView,
+        selection: &Selection,
         table_bytes_map: &HashMap<&str, &[u8]>,
         table_schema_map: &HashMap<&str, TableSchema>,
     ) -> Vec<HashMap<String, Value>> {
@@ -390,6 +413,7 @@ impl<'a> SelectQueryExecutor<'a> {
             }
         }
 
+        todo!("Use selection");
         for view_reader in view.iter(table_bytes_map, table_schema_map) {
             let mut out_row = HashMap::new();
             for output_field in &output_fields {
