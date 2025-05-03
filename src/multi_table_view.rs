@@ -11,6 +11,7 @@ pub struct MultiTableViewRowReader<'a> {
     table_schema_map: &'a HashMap<&'a str, TableSchema>,
     view_row: &'a Vec<usize>,
     tables: &'a HashMap<String, usize>,
+    pub view_idx: usize,
 }
 
 impl<'a> MultiTableViewRowReader<'a> {
@@ -185,6 +186,7 @@ impl<'a> Iterator for MultiTableViewIterator<'a> {
                 table_schema_map: self.table_schema_map,
                 view_row: &self.view.view[current_idx],
                 tables: &self.view.tables,
+                view_idx: current_idx,
             })
         }
     }

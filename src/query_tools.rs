@@ -73,11 +73,12 @@ impl<'a> SelectQueryExecutor<'a> {
             self.generate_multi_table_view(&selections, &table_bytes_map, &table_schema_map);
 
         // todo!("Execute multi table (different table) filters and generate a selection. Leftover filters are in `filters_left`.");
-        let view_selection = self.execute_filters_on_multi_view(
+        let view_selection = Self::execute_filters_on_multi_view(
+            &multi_table_view,
             &table_bytes_map,
             &table_schema_map,
             &mut filters_left,
-        )?;
+        );
 
         // Materialize the selection and return.
         Ok(self.materialize_view(
@@ -166,12 +167,34 @@ impl<'a> SelectQueryExecutor<'a> {
     }
 
     fn execute_filters_on_multi_view(
-        &self,
+        multi_table_view: &MultiTableView,
         table_bytes_map: &HashMap<&str, &[u8]>,
         table_schema_map: &HashMap<&str, TableSchema>,
         filters_left: &mut Vec<&RowFilter>,
-    ) -> Result<Selection, Error> {
-        unimplemented!()
+    ) -> Selection {
+        let mut positions = vec![];
+
+        for view_row_reader in multi_table_view.iter(table_bytes_map, table_schema_map) {
+            for filter in filters_left.iter() {
+                assert!(filter.is_multi_table() && !filter.is_multi_same_table());
+
+                let lhs_table_reader = view_row_reader.table_reader(filter.field.source.as_str());
+                let lhs_value = lhs_table_reader.get_field_value(filter.field.name.as_str());
+
+                let rhs_table_reader =
+                    view_row_reader.table_reader(filter.rhs.as_field_selector().source.as_str());
+                let rhs_value =
+                    rhs_table_reader.get_field_value(filter.rhs.as_field_selector().name.as_str());
+
+                if lhs_value.cmp(&rhs_value) == filter.op {
+                    positions.push(view_row_reader.view_idx);
+                }
+            }
+        }
+
+        filters_left.clear();
+
+        Selection::List(positions)
     }
 
     fn collect_table_schemas_from_query(&self) -> Result<HashMap<&str, TableSchema>, Error> {
