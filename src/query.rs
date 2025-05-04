@@ -35,8 +35,9 @@ impl FilterSource {
     /// Panics when the tables are the same.
     #[must_use]
     pub fn new_multi(table_lhs: String, table_rhs: String) -> Self {
-        assert!(table_lhs != table_rhs);
-        if table_lhs <= table_rhs {
+        if table_lhs == table_rhs {
+            Self::Single(table_lhs)
+        } else if table_lhs <= table_rhs {
             Self::Multi(table_lhs, table_rhs)
         } else {
             Self::Multi(table_rhs, table_lhs)

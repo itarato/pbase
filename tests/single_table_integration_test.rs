@@ -132,3 +132,73 @@ fn test_basic_single_table_create_and_load() {
         query_result.as_ref().unwrap()[0]["testtable.field2"]
     );
 }
+
+#[test]
+fn test_single_table_field_reference_filter() {
+    delete_all_files_by_glob("singleref_t*");
+
+    let db = PBase::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::new()));
+
+    // Create table.
+    let create_table_query = CreateTableQuery {
+        schema: TableSchema {
+            name: "singleref_t".into(),
+            fields: IndexMap::from([
+                ("f1".into(), FieldSchema::U8),
+                ("f2".into(), FieldSchema::U8),
+            ]),
+            indices: HashMap::new(),
+        },
+    };
+    db.run_create_table_query(&create_table_query).unwrap();
+
+    assert!(db
+        .run_insert_query(&InsertQuery {
+            table: "singleref_t".into(),
+            values: HashMap::from([("f1".into(), Value::U8(2)), ("f2".into(), Value::U8(2))]), // Equal.
+        })
+        .is_ok());
+    assert!(db
+        .run_insert_query(&InsertQuery {
+            table: "singleref_t".into(),
+            values: HashMap::from([("f1".into(), Value::U8(3)), ("f2".into(), Value::U8(4))]),
+        })
+        .is_ok());
+    assert!(db
+        .run_insert_query(&InsertQuery {
+            table: "singleref_t".into(),
+            values: HashMap::from([("f1".into(), Value::U8(1)), ("f2".into(), Value::U8(1))]), // Equal.
+        })
+        .is_ok());
+    assert!(db
+        .run_insert_query(&InsertQuery {
+            table: "singleref_t".into(),
+            values: HashMap::from([("f1".into(), Value::U8(6)), ("f2".into(), Value::U8(5))]),
+        })
+        .is_ok());
+
+    let query = SelectQuery {
+        from: "singleref_t".into(),
+        joins: vec![],
+        filters: vec![RowFilter {
+            field: FieldSelector {
+                name: "f1".into(),
+                source: "singleref_t".into(),
+            },
+            op: std::cmp::Ordering::Equal,
+            rhs: RhsValue::Ref(FieldSelector {
+                name: "f2".into(),
+                source: "singleref_t".into(),
+            }),
+        }],
+    };
+
+    let result = db.run_select_query(query).unwrap();
+    assert_eq!(2, result.len());
+
+    assert_eq!(Value::U8(2), result[0]["singleref_t.f1"]);
+    assert_eq!(Value::U8(2), result[0]["singleref_t.f2"]);
+
+    assert_eq!(Value::U8(1), result[1]["singleref_t.f1"]);
+    assert_eq!(Value::U8(1), result[1]["singleref_t.f2"]);
+}
