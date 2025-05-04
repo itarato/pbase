@@ -81,6 +81,7 @@ fn test_join_table_all() {
             ("www_t1.value".to_string(), Value::I32(100)),
             ("www_t2.t1_id".to_string(), Value::I32(0)),
             ("www_t2.value".to_string(), Value::I32(1000)),
+            ("www_t2.v2".to_string(), Value::I32(555)),
         ]),
         query_result[0],
     );
@@ -90,6 +91,7 @@ fn test_join_table_all() {
             ("www_t1.value".to_string(), Value::I32(100)),
             ("www_t2.t1_id".to_string(), Value::I32(0)),
             ("www_t2.value".to_string(), Value::I32(2000)),
+            ("www_t2.v2".to_string(), Value::I32(101)),
         ]),
         query_result[1],
     );
@@ -99,6 +101,7 @@ fn test_join_table_all() {
             ("www_t1.value".to_string(), Value::I32(102)),
             ("www_t2.t1_id".to_string(), Value::I32(2)),
             ("www_t2.value".to_string(), Value::I32(3002)),
+            ("www_t2.v2".to_string(), Value::I32(102)),
         ]),
         query_result[2],
     );
@@ -139,14 +142,14 @@ fn test_join_table_filtered() {
     let query_result = query_result.unwrap();
     assert_eq!(2, query_result.len());
 
-    // ┌──┬─────┐   ┌─────┬─────┐
-    // │id│value│   │t1_id│value│
-    // ├──┼─────┤   ├─────┼─────┤
-    // │0 │100  │   │0    │1000 │
-    // │1 │101  │   │0    │2000 │
-    // │2 │102  │   │2    │3002 │
-    // │3 │103  │   │4    │4004 │
-    // └──┴─────┘   └─────┴─────┘
+    // ┌──┬─────┐   ┌─────┬─────┬───┐
+    // │id│value│   │t1_id│value│v2 │
+    // ├──┼─────┤   ├─────┼─────┼───┤
+    // │0 │100  │   │0    │1000 │555│
+    // │1 │101  │   │0    │2000 │101│
+    // │2 │102  │   │2    │3002 │102│
+    // │3 │103  │   │4    │4004 │99 │
+    // └──┴─────┘   └─────┴─────┴───┘
 
     assert_eq!(
         HashMap::from([
@@ -154,6 +157,7 @@ fn test_join_table_filtered() {
             ("eee_t1.value".to_string(), Value::I32(100)),
             ("eee_t2.t1_id".to_string(), Value::I32(0)),
             ("eee_t2.value".to_string(), Value::I32(2000)),
+            ("eee_t2.v2".to_string(), Value::I32(101)),
         ]),
         query_result[0],
     );
@@ -163,8 +167,63 @@ fn test_join_table_filtered() {
             ("eee_t1.value".to_string(), Value::I32(102)),
             ("eee_t2.t1_id".to_string(), Value::I32(2)),
             ("eee_t2.value".to_string(), Value::I32(3002)),
+            ("eee_t2.v2".to_string(), Value::I32(102)),
         ]),
         query_result[1],
+    );
+}
+
+#[test]
+fn test_multi_table_cross_table_ref_filter() {
+    let db = setup_multi_tables("fff");
+
+    let query = SelectQuery {
+        from: "fff_t1".into(),
+        joins: vec![JoinContract {
+            join_type: pbase::query::JoinType::Inner,
+            lhs: FieldSelector {
+                name: "id".into(),
+                source: "fff_t1".into(),
+            },
+            rhs: FieldSelector {
+                name: "t1_id".into(),
+                source: "fff_t2".into(),
+            },
+        }],
+        filters: vec![RowFilter {
+            field: FieldSelector {
+                name: "value".to_string(),
+                source: "fff_t1".to_string(),
+            },
+            op: std::cmp::Ordering::Equal,
+            rhs: RhsValue::Ref(FieldSelector {
+                name: "v2".into(),
+                source: "fff_t2".into(),
+            }),
+        }],
+    };
+
+    // ┌──┬─────┐   ┌─────┬─────┬───┐
+    // │id│value│   │t1_id│value│v2 │
+    // ├──┼─────┤   ├─────┼─────┼───┤
+    // │0 │100  │   │0    │1000 │555│
+    // │1 │101  │   │0    │2000 │101│
+    // │2 │102  │   │2    │3002 │102│
+    // │3 │103  │   │4    │4004 │99 │
+    // └──┴─────┘   └─────┴─────┴───┘
+
+    let result = db.run_select_query(query).unwrap();
+    assert_eq!(1, result.len());
+
+    assert_eq!(
+        HashMap::from([
+            ("fff_t1.id".to_string(), Value::I32(2)),
+            ("fff_t1.value".to_string(), Value::I32(102)),
+            ("fff_t2.t1_id".to_string(), Value::I32(2)),
+            ("fff_t2.value".to_string(), Value::I32(3002)),
+            ("fff_t2.v2".to_string(), Value::I32(102)),
+        ]),
+        result[0],
     );
 }
 
@@ -204,6 +263,7 @@ fn setup_multi_tables(prefix: &str) -> PBase {
             fields: IndexMap::from([
                 ("t1_id".into(), FieldSchema::I32),
                 ("value".into(), FieldSchema::I32),
+                ("v2".into(), FieldSchema::I32),
             ]),
             indices: HashMap::new(),
         },
@@ -211,14 +271,14 @@ fn setup_multi_tables(prefix: &str) -> PBase {
     let create_result = db.run_create_table_query(&create_table_query);
     assert!(create_result.is_ok());
 
-    // ┌──┬─────┐   ┌─────┬─────┐
-    // │id│value│   │t1_id│value│
-    // ├──┼─────┤   ├─────┼─────┤
-    // │0 │100  │   │0    │1000 │
-    // │1 │101  │   │0    │2000 │
-    // │2 │102  │   │2    │3002 │
-    // │3 │103  │   │4    │4004 │
-    // └──┴─────┘   └─────┴─────┘
+    // ┌──┬─────┐   ┌─────┬─────┬───┐
+    // │id│value│   │t1_id│value│v2 │
+    // ├──┼─────┤   ├─────┼─────┼───┤
+    // │0 │100  │   │0    │1000 │555│
+    // │1 │101  │   │0    │2000 │101│
+    // │2 │102  │   │2    │3002 │102│
+    // │3 │103  │   │4    │4004 │99 │
+    // └──┴─────┘   └─────┴─────┴───┘
 
     // Insert.
     let insert_query = InsertQuery {
@@ -266,6 +326,7 @@ fn setup_multi_tables(prefix: &str) -> PBase {
         values: HashMap::from([
             ("t1_id".into(), Value::I32(0)),
             ("value".into(), Value::I32(1000)),
+            ("v2".into(), Value::I32(555)),
         ]),
     };
     let insert_result = db.run_insert_query(&insert_query);
@@ -276,6 +337,7 @@ fn setup_multi_tables(prefix: &str) -> PBase {
         values: HashMap::from([
             ("t1_id".into(), Value::I32(0)),
             ("value".into(), Value::I32(2000)),
+            ("v2".into(), Value::I32(101)),
         ]),
     };
     let insert_result = db.run_insert_query(&insert_query);
@@ -286,6 +348,7 @@ fn setup_multi_tables(prefix: &str) -> PBase {
         values: HashMap::from([
             ("t1_id".into(), Value::I32(2)),
             ("value".into(), Value::I32(3002)),
+            ("v2".into(), Value::I32(102)),
         ]),
     };
     let insert_result = db.run_insert_query(&insert_query);
@@ -296,6 +359,7 @@ fn setup_multi_tables(prefix: &str) -> PBase {
         values: HashMap::from([
             ("t1_id".into(), Value::I32(4)),
             ("value".into(), Value::I32(4004)),
+            ("v2".into(), Value::I32(99)),
         ]),
     };
     let insert_result = db.run_insert_query(&insert_query);
