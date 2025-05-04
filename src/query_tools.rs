@@ -172,9 +172,17 @@ impl<'a> SelectQueryExecutor<'a> {
         table_schema_map: &HashMap<&str, TableSchema>,
         filters_left: &mut Vec<&RowFilter>,
     ) -> Selection {
+        if filters_left.is_empty() {
+            return Selection::All;
+        }
+
         let mut positions = vec![];
 
-        for view_row_reader in multi_table_view.iter(table_bytes_map, table_schema_map) {
+        for view_row_reader in
+            multi_table_view.iter(table_bytes_map, table_schema_map, &Selection::All)
+        {
+            let mut is_match = true;
+
             for filter in filters_left.iter() {
                 assert!(filter.is_multi_table() && !filter.is_multi_same_table());
 
@@ -186,9 +194,14 @@ impl<'a> SelectQueryExecutor<'a> {
                 let rhs_value =
                     rhs_table_reader.get_field_value(filter.rhs.as_field_selector().name.as_str());
 
-                if lhs_value.cmp(&rhs_value) == filter.op {
-                    positions.push(view_row_reader.view_idx);
+                if lhs_value.cmp(&rhs_value) != filter.op {
+                    is_match = false;
+                    break;
                 }
+            }
+
+            if is_match {
+                positions.push(view_row_reader.view_idx);
             }
         }
 
@@ -374,6 +387,7 @@ impl<'a> SelectQueryExecutor<'a> {
         let mut filtered_positions = vec![];
         for pos in selection_it {
             let row_bytes = &table_bytes[pos..pos + row_byte_len];
+            let mut is_match = true;
 
             // We need to go through all filters.
             for filter in &table_filters {
@@ -394,10 +408,14 @@ impl<'a> SelectQueryExecutor<'a> {
                     }
                 };
 
-                if is_satisfy {
-                    // Add to filtered positions.
-                    filtered_positions.push(pos);
+                if !is_satisfy {
+                    is_match = false;
                 }
+            }
+
+            if is_match {
+                // Add to filtered positions.
+                filtered_positions.push(pos);
             }
         }
 
@@ -436,8 +454,7 @@ impl<'a> SelectQueryExecutor<'a> {
             }
         }
 
-        todo!("Use selection");
-        for view_reader in view.iter(table_bytes_map, table_schema_map) {
+        for view_reader in view.iter(table_bytes_map, table_schema_map, selection) {
             let mut out_row = HashMap::new();
             for output_field in &output_fields {
                 let table_reader = view_reader.table_reader(&output_field.source);

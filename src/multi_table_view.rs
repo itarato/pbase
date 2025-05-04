@@ -155,11 +155,13 @@ impl MultiTableView {
         &'a self,
         table_bytes_map: &'a HashMap<&'a str, &'a [u8]>,
         table_schema_map: &'a HashMap<&'a str, TableSchema>,
+        selection: &'a Selection,
     ) -> MultiTableViewIterator<'a> {
         MultiTableViewIterator {
             table_bytes_map,
             table_schema_map,
             view: self,
+            selection,
             current_idx: 0,
         }
     }
@@ -169,6 +171,7 @@ pub struct MultiTableViewIterator<'a> {
     table_bytes_map: &'a HashMap<&'a str, &'a [u8]>,
     table_schema_map: &'a HashMap<&'a str, TableSchema>,
     view: &'a MultiTableView,
+    selection: &'a Selection,
     current_idx: usize,
 }
 
@@ -176,18 +179,37 @@ impl<'a> Iterator for MultiTableViewIterator<'a> {
     type Item = MultiTableViewRowReader<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_idx >= self.view.len() {
-            None
-        } else {
-            let current_idx = self.current_idx;
-            self.current_idx += 1;
-            Some(MultiTableViewRowReader {
-                table_bytes_map: self.table_bytes_map,
-                table_schema_map: self.table_schema_map,
-                view_row: &self.view.view[current_idx],
-                tables: &self.view.tables,
-                view_idx: current_idx,
-            })
+        match self.selection {
+            Selection::All => {
+                if self.current_idx >= self.view.len() {
+                    None
+                } else {
+                    let current_idx = self.current_idx;
+                    self.current_idx += 1;
+                    Some(MultiTableViewRowReader {
+                        table_bytes_map: self.table_bytes_map,
+                        table_schema_map: self.table_schema_map,
+                        view_row: &self.view.view[current_idx],
+                        tables: &self.view.tables,
+                        view_idx: current_idx,
+                    })
+                }
+            }
+            Selection::List(positions) => {
+                if self.current_idx >= positions.len() {
+                    None
+                } else {
+                    let current_idx = self.current_idx;
+                    self.current_idx += 1;
+                    Some(MultiTableViewRowReader {
+                        table_bytes_map: self.table_bytes_map,
+                        table_schema_map: self.table_schema_map,
+                        view_row: &self.view.view[positions[current_idx]],
+                        tables: &self.view.tables,
+                        view_idx: current_idx,
+                    })
+                }
+            }
         }
     }
 }
