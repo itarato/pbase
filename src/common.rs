@@ -10,6 +10,8 @@ pub enum PBaseError {
     InvalidTableSizeError,
     #[error("Bad file write length")]
     BadFileWriteLength,
+    #[error("Bad token found: {0}")]
+    BadToken(String),
 }
 
 ///

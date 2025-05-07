@@ -4,6 +4,7 @@
 #![deny(clippy::cargo)]
 
 pub mod common;
+pub mod lexer;
 pub mod multi_table_view;
 pub mod pbase;
 pub mod query;
