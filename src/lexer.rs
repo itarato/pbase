@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use crate::common::{Error, PBaseError};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
     Select,
     From,

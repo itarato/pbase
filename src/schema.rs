@@ -7,7 +7,7 @@ use crate::{common::Selection, value::Value};
 pub type TablePtrType = u64;
 pub const TABLE_PTR_BYTE_SIZE: usize = std::mem::size_of::<TablePtrType>();
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FieldSchema {
     U8,
     I32,
@@ -40,7 +40,7 @@ impl FieldSchema {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TableSchema {
     pub name: String,
     pub fields: IndexMap<String, FieldSchema>,

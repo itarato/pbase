@@ -45,3 +45,7 @@ path = "src/bin/bigtable_dump.rs"
 [[bin]]
 name = "sqlite"
 path = "src/bin/sqlite.rs"
+
+[[bin]]
+name = "cli"
+path = "src/bin/cli.rs"

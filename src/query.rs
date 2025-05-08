@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use crate::{schema::TableSchema, value::Value};
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct FieldSelector {
     pub name: String,
     pub source: String,
@@ -45,7 +45,7 @@ impl FilterSource {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RhsValue {
     Value(Value),
     Ref(FieldSelector),
@@ -75,7 +75,7 @@ impl RhsValue {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RowFilter {
     pub field: FieldSelector,
     pub op: Ordering,
@@ -115,6 +115,7 @@ impl RowFilter {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum JoinType {
     Inner,
     // Left,
@@ -122,12 +123,21 @@ pub enum JoinType {
     // Outer,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct JoinContract {
     pub join_type: JoinType,
     pub lhs: FieldSelector,
     pub rhs: FieldSelector,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Query {
+    Select(SelectQuery),
+    Insert(InsertQuery),
+    CreateTable(CreateTableQuery),
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct SelectQuery {
     pub from: String,
     pub joins: Vec<JoinContract>,
@@ -135,11 +145,13 @@ pub struct SelectQuery {
     pub filters: Vec<RowFilter>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct InsertQuery {
     pub table: String,
     pub values: HashMap<String, Value>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct CreateTableQuery {
     pub schema: TableSchema,
 }

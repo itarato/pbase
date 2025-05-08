@@ -6,6 +6,7 @@
 pub mod common;
 pub mod lexer;
 pub mod multi_table_view;
+pub mod parser;
 pub mod pbase;
 pub mod query;
 pub mod query_tools;

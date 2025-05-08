@@ -12,6 +12,10 @@ pub enum PBaseError {
     BadFileWriteLength,
     #[error("Bad token found: {0}")]
     BadToken(String),
+    #[error("No more tokens")]
+    NoMoreTokens,
+    #[error("Unexpected token at parsing: {0}")]
+    UnexpextedToken(String),
 }
 
 ///
