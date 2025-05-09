@@ -34,7 +34,7 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Query, Error> {
         match self.head() {
             Some(&Token::Select) => Ok(Query::Select(self.parse_select_query()?)),
-            head => unimplemented!("Not yet implemented for token: {:?}", head),
+            head => Err(format!("Not yet implemented for token: {head:?}",).into()),
         }
     }
 
